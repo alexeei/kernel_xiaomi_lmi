@@ -80,7 +80,7 @@ static DEFINE_RWLOCK(binfmt_lock);
 #define HWCOMPOSER_BIN_PREFIX "/vendor/bin/hw/android.hardware.graphics.composer"
 #define ZYGOTE32_BIN "/system/bin/app_process32"
 #define ZYGOTE64_BIN "/system/bin/app_process64"
-#define UDFPS_BIN_PREFIX "/vendor/bin/hw/android.hardware.biometrics.fingerprint@2.3-service.xiaomi_kona"
+#define UDFPS_BIN_PREFIX "/vendor/bin/hw/android.hardware.biometrics.fingerprint@2.3-service.lmi"
 static struct signal_struct *zygote32_sig;
 static struct signal_struct *zygote64_sig;
 

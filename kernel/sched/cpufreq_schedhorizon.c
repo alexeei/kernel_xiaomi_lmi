@@ -32,11 +32,11 @@ static u64 default_up_delay_pr[] = {100 * NSEC_PER_MSEC,100 * NSEC_PER_MSEC,100 
 #define DEFAULT_RTG_BOOST_FREQ_HP 0
 #define DEFAULT_RTG_BOOST_FREQ_PR 0
 
-#define DEFAULT_HISPEED_LOAD_LP 100
+#define DEFAULT_HISPEED_LOAD_LP 90
 #define DEFAULT_HISPEED_LOAD_HP 50
-#define DEFAULT_HISPEED_LOAD_PR 100
+#define DEFAULT_HISPEED_LOAD_PR 90
 
-#define DEFAULT_HISPEED_FREQ_LP 0
+#define DEFAULT_HISPEED_FREQ_LP 1075200
 #define DEFAULT_HISPEED_FREQ_HP 1478400
 #define DEFAULT_HISPEED_FREQ_PR 0
 
@@ -1159,7 +1159,7 @@ static void sugov_policy_free(struct sugov_policy *sg_policy)
 static int sugov_kthread_create(struct sugov_policy *sg_policy)
 {
 	struct task_struct *thread;
-	struct sched_param param = { .sched_priority = MAX_USER_RT_PRIO / 2 };
+	struct sched_param param = { .sched_priority = MAX_USER_RT_PRIO - 1 };
 	struct cpufreq_policy *policy = sg_policy->policy;
 	int ret;
 

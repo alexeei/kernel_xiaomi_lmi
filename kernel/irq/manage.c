@@ -1493,6 +1493,8 @@ __setup_irq(unsigned int irq, struct irq_desc *desc, struct irqaction *new)
 			if (ret)
 				goto out_thread;
 		}
+		
+		
 	}
 
 	/*
@@ -1692,6 +1694,8 @@ __setup_irq(unsigned int irq, struct irq_desc *desc, struct irqaction *new)
 		if (new->flags & (IRQF_PERF_AFFINE | IRQF_PRIME_AFFINE)) {
 			affine_one_perf_thread(new);
 			irqd_set(&desc->irq_data, IRQD_PERF_CRITICAL);
+			irq_set_affinity_locked(&desc->irq_data,
+				cpu_perf_mask, true);
 			*old_ptr = new;
 		}
 
