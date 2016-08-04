@@ -732,10 +732,6 @@ else ifeq ($(cc-name),clang)
 KBUILD_CFLAGS   += -O3 -march=armv8.1-a+crypto+fp16+rcpc
 KBUILD_AFLAGS   += -O3 -march=armv8.1-a+crypto+fp16+rcpc
 KBUILD_LDFLAGS  += -O3
-else
-KBUILD_CFLAGS   += -O2
-KBUILD_AFLAGS   += -O2
-KBUILD_LDFLAGS  += -O2
 ifdef CONFIG_POLLY_CLANG
 POLLY_FLAGS	+= -mllvm -polly \
 		   -mllvm -polly-ast-use-context \
@@ -767,18 +763,13 @@ KBUILD_CFLAGS += $(POLLY_FLAGS)
 KBUILD_AFLAGS += $(POLLY_FLAGS)
 KBUILD_LDFLAGS	+= $(POLLY_FLAGS)
 endif
-<<<<<<< HEAD
 
 ifdef CONFIG_INLINE_OPTIMIZATION
 KBUILD_CFLAGS	+= -mllvm -inline-threshold=2000
 KBUILD_CFLAGS	+= -mllvm -inlinehint-threshold=3000
 KBUILD_CFLAGS   += -mllvm -unroll-threshold=1200
-=======
-ifdef CONFIG_INLINE_OPTIMIZATION
-KBUILD_CFLAGS	+= -mllvm -inline-threshold=600
-KBUILD_CFLAGS	+= -mllvm -inlinehint-threshold=750
->>>>>>> 2991bba55344a (kbuild: Add a config to optimise inlining)
 endif
+
 else
 KBUILD_CFLAGS   += -O2
 KBUILD_AFLAGS   += -O2
