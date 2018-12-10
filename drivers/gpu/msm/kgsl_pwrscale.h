@@ -25,7 +25,6 @@
 #define STABLE_TIME	150
 
 
-
 struct kgsl_power_stats {
 	u64 busy_time;
 	u64 ram_time;
@@ -119,7 +118,6 @@ int kgsl_busmon_target(struct device *dev, unsigned long *freq, u32 flags);
 int kgsl_busmon_get_dev_status(struct device *dev,
 			struct devfreq_dev_status *stat);
 int kgsl_busmon_get_cur_freq(struct device *dev, unsigned long *freq);
-
 
 
 #define KGSL_PWRSCALE_INIT(_priv_data) { \

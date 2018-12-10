@@ -194,7 +194,6 @@ static unsigned int _adjust_pwrlevel(struct kgsl_pwrctrl *pwr, int level,
 	break;
 	}
 
-	
 
 	if (level < max_pwrlevel)
 		return max_pwrlevel;
@@ -1302,7 +1301,6 @@ static ssize_t bus_split_store(struct device *dev,
 
 	return count;
 }
-
 
 
 static ssize_t gpu_model_show(struct device *dev,

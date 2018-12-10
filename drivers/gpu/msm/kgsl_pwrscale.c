@@ -11,7 +11,6 @@
 #include "kgsl_trace.h"
 
 
-
 /**
  * struct kgsl_midframe_info - midframe power stats sampling info
  * @timer - midframe sampling timer
@@ -43,7 +42,6 @@ static struct devfreq_dev_status last_status = { .private_data = &last_xstats };
  */
 void kgsl_pwrscale_sleep(struct kgsl_device *device)
 {
-	
 
 	if (!device->pwrscale.enabled)
 		return;
@@ -278,7 +276,6 @@ static int _thermal_adjust(struct kgsl_pwrctrl *pwr, int level)
 }
 
 
-
 #ifdef DEVFREQ_FLAG_WAKEUP_MAXFREQ
 static inline bool _check_maxfreq(u32 flags)
 {
@@ -350,7 +347,7 @@ int kgsl_devfreq_target(struct device *dev, unsigned long *freq, u32 flags)
 			}
 		if (level != pwr->active_pwrlevel)
 			kgsl_pwrctrl_pwrlevel_change(device, level);
-	
+
 	}
 
 	*freq = kgsl_pwrctrl_active_freq(pwr);

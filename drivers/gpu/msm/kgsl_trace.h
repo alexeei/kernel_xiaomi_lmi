@@ -867,7 +867,6 @@ TRACE_EVENT(kgsl_regwrite,
 );
 
 
-
 TRACE_EVENT(kgsl_register_event,
 		TP_PROTO(unsigned int id, unsigned int timestamp, void *func),
 		TP_ARGS(id, timestamp, func),
