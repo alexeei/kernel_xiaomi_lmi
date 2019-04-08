@@ -3192,6 +3192,7 @@ static inline bool is_min_capacity_cpu(int cpu)
 }
 
 
+
 static inline bool is_asym_cap_cpu(int cpu) { return false; }
 
 static inline int asym_cap_siblings(int cpu1, int cpu2) { return 0; }
