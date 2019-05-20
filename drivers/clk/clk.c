@@ -52,6 +52,7 @@ struct clk_handoff_vdd {
 static LIST_HEAD(clk_handoff_vdd_list);
 static bool vdd_class_handoff_completed;
 static DEFINE_MUTEX(vdd_class_list_lock);
+
 /*
  * clk_rate_change_list is used during clk_core_set_rate_nolock() calls to
  * handle vdd_class vote tracking.  core->rate_change_node is added to
@@ -152,6 +153,8 @@ static void clk_pm_runtime_put(struct clk_core *core)
 /***           locking             ***/
 static void clk_prepare_lock(void)
 {
+	if (oops_in_progress)
+		return;
 	if (!mutex_trylock(&prepare_lock)) {
 		if (prepare_owner == current) {
 			prepare_refcnt++;
@@ -167,6 +170,9 @@ static void clk_prepare_lock(void)
 
 static void clk_prepare_unlock(void)
 {
+	if (oops_in_progress)
+		return;
+
 	WARN_ON_ONCE(prepare_owner != current);
 	WARN_ON_ONCE(prepare_refcnt == 0);
 
@@ -180,6 +186,9 @@ static unsigned long clk_enable_lock(void)
 	__acquires(enable_lock)
 {
 	unsigned long flags;
+
+	if (oops_in_progress)
+		return 1;
 
 	/*
 	 * On UP systems, spin_trylock_irqsave() always returns true, even if
@@ -207,6 +216,9 @@ static unsigned long clk_enable_lock(void)
 static void clk_enable_unlock(unsigned long flags)
 	__releases(enable_lock)
 {
+	if (oops_in_progress)
+		return;
+
 	WARN_ON_ONCE(enable_owner != current);
 	WARN_ON_ONCE(enable_refcnt == 0);
 
@@ -1018,6 +1030,12 @@ static void clk_core_unprepare(struct clk_core *core)
 
 	trace_clk_unprepare_complete(core);
 
+	if (core->vdd_class) {
+		clk_unvote_vdd_level(core->vdd_class, core->vdd_class_vote);
+		core->vdd_class_vote = 0;
+		core->new_vdd_class_vote = 0;
+	}
+
 	clk_core_unprepare(core->parent);
 	clk_pm_runtime_put(core);
 }
@@ -1085,8 +1103,10 @@ static int clk_core_prepare(struct clk_core *core)
 
 		trace_clk_prepare_complete(core);
 
-		if (ret)
-
+		if (ret) {
+			clk_unvote_rate_vdd(core, core->rate);
+			core->vdd_class_vote = 0;
+			core->new_vdd_class_vote = 0;
 			goto unprepare;
 		}
 	}
@@ -3248,6 +3268,11 @@ static struct hlist_head *all_lists[] = {
 	NULL,
 };
 
+static struct hlist_head *orphan_list[] = {
+	&clk_orphan_list,
+	NULL,
+};
+
 static void clk_state_subtree(struct clk_core *c)
 {
 	int vdd_level = 0;
@@ -3296,11 +3321,6 @@ static const struct file_operations clk_state_fops = {
 	.read		= seq_read,
 	.llseek		= seq_lseek,
 	.release	= single_release,
-};
-
-static struct hlist_head *orphan_list[] = {
-	&clk_orphan_list,
-	NULL,
 };
 
 static void clk_summary_show_one(struct seq_file *s, struct clk_core *c,
