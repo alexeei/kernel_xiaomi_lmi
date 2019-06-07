@@ -736,8 +736,8 @@ retry:
 			if (entropy_bits < 128)
 				return;
 			crng_reseed(&primary_crng, r);
+			entropy_bits = ENTROPY_BITS(r);
 
-			entropy_bits = r->entropy_count >> ENTROPY_SHIFT;
 		}
 	}
 }
