@@ -196,7 +196,7 @@ static int _sde_fence_create_fd(void *fence_ctx, uint32_t val)
 	}
 
 	sde_fence = kmem_cache_zalloc(kmem_fence_pool, GFP_KERNEL);
-	if (unlikely(!sde_fence))
+	if (!sde_fence)
 		return -ENOMEM;
 
 	sde_fence->ctx = fence_ctx;
@@ -246,6 +246,8 @@ struct sde_fence_context *sde_fence_init(const char *name, uint32_t drm_id)
 		SDE_ERROR("failed to alloc fence ctx\n");
 		return ERR_PTR(-ENOMEM);
 	}
+	
+	kmem_fence_pool = KMEM_CACHE(sde_fence, SLAB_HWCACHE_ALIGN | SLAB_PANIC);
 
 	ctx->drm_id = drm_id;
 	kref_init(&ctx->kref);
@@ -266,6 +268,8 @@ void sde_fence_deinit(struct sde_fence_context *ctx)
 	}
 
 	kref_put(&ctx->kref, sde_fence_destroy);
+	
+	kmem_cache_destroy(kmem_fence_pool);
 }
 
 void sde_fence_prepare(struct sde_fence_context *ctx)
