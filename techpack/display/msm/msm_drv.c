@@ -63,8 +63,12 @@
 #define MSM_VERSION_MINOR	3
 #define MSM_VERSION_PATCHLEVEL	0
 
+
 #define IDLE_ENCODER_MASK_DEFAULT       1
 #define IDLE_TIMEOUT_MS_DEFAULT         100
+
+static struct kmem_cache *kmem_vblank_work_pool;
+
 
 static DEFINE_MUTEX(msm_release_lock);
 
