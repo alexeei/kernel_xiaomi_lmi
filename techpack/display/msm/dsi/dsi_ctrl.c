@@ -1205,7 +1205,8 @@ int dsi_message_validate_tx_mode(struct dsi_ctrl *dsi_ctrl,
 		const size_t transfer_size = dsi_ctrl->cmd_len + cmd_len + 4;
 
 		if (transfer_size > DSI_EMBEDDED_MODE_DMA_MAX_SIZE_BYTES) {
-			pr_err("Cannot transfer, size: %zu is greater than %d\n",
+
+			DSI_CTRL_ERR(dsi_ctrl,"Cannot transfer, size: %zu is greater than %d\n",
 			       transfer_size,
 			       DSI_EMBEDDED_MODE_DMA_MAX_SIZE_BYTES);
 			return -ENOTSUPP;
@@ -1392,6 +1393,10 @@ static int dsi_message_tx(struct dsi_ctrl *dsi_ctrl,
 		 (msg->flags & MIPI_DSI_MSG_LASTCOMMAND) != 0);
 
 	if (*flags & DSI_CTRL_CMD_NON_EMBEDDED_MODE) {
+	DSI_CTRL_DEBUG(dsi_ctrl, "cmd tx type=%02x cmd=%02x len=%d last=%d\n",
+		 msg->type, msg->tx_len ? *((u8 *)msg->tx_buf) : 0, msg->tx_len,
+		 (msg->flags & MIPI_DSI_MSG_LASTCOMMAND) != 0);
+
 		cmd_mem.offset = dsi_ctrl->cmd_buffer_iova;
 		cmd_mem.en_broadcast = (*flags & DSI_CTRL_CMD_BROADCAST) ?
 			true : false;
@@ -1429,10 +1434,12 @@ static int dsi_message_tx(struct dsi_ctrl *dsi_ctrl,
 
 		rc = dsi_ctrl_copy_and_pad_cmd(&packet, cmdbuf, length);
 		if (rc) {
-			pr_err("[%s] failed to copy message, rc=%d\n",
-					dsi_ctrl->name, rc);
+
+			DSI_CTRL_ERR(dsi_ctrl, "failed to copy message, rc=%d\n",
+					rc);
 			goto error;
 		}
+
 		/* Embedded mode config is selected */
 		cmd_mem.offset = dsi_ctrl->cmd_buffer_iova;
 		cmd_mem.en_broadcast = (*flags & DSI_CTRL_CMD_BROADCAST) ?
@@ -1461,8 +1468,8 @@ static int dsi_message_tx(struct dsi_ctrl *dsi_ctrl,
 
 		rc = dsi_ctrl_copy_and_pad_cmd(&packet, buffer, length);
 		if (rc) {
-			pr_err("[%s] failed to copy message, rc=%d\n",
-					dsi_ctrl->name, rc);
+			DSI_CTRL_ERR(dsi_ctrl, "failed to copy message, rc=%d\n",
+					rc);
 			goto error;
 		}
 
