@@ -2428,4 +2428,6 @@ void add_bootloader_randomness(const void *buf, unsigned int size)
 	else
 		add_device_randomness(buf, size);
 }
+
 EXPORT_SYMBOL_GPL(add_bootloader_randomness);
+
