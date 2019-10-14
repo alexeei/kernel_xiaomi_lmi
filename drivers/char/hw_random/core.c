@@ -458,13 +458,15 @@ static void start_khwrngd(void)
 int hwrng_register(struct hwrng *rng)
 {
 	int err = -EINVAL;
-	struct hwrng *old_rng, *tmp;
+	struct hwrng *tmp;
 	struct list_head *rng_list_ptr;
+	bool is_new_current = false;
 
 	if (!rng->name || (!rng->data_read && !rng->read))
 		goto out;
 
 	mutex_lock(&rng_mutex);
+
 	/* Must not register two RNGs with the same name. */
 	err = -EEXIST;
 	list_for_each_entry(tmp, &rng_list, list) {
@@ -483,10 +485,8 @@ int hwrng_register(struct hwrng *rng)
 	}
 	list_add_tail(&rng->list, rng_list_ptr);
 
-	old_rng = current_rng;
-	err = 0;
-	if (!old_rng ||
-	    (!cur_rng_set_by_user && rng->quality > old_rng->quality)) {
+	if (!current_rng ||
+	    (!cur_rng_set_by_user && rng->quality > current_rng->quality)) {
 		/*
 		 * Set new rng as current as the new rng source
 		 * provides better entropy quality and was not
@@ -495,9 +495,15 @@ int hwrng_register(struct hwrng *rng)
 		err = set_current_rng(rng);
 		if (err)
 			goto out_unlock;
+		/* to use current_rng in add_early_randomness() we need
+		 * to take a ref
+		 */
+		is_new_current = true;
+		kref_get(&rng->ref);
 	}
 
-	if (old_rng && !rng->init) {
+	mutex_unlock(&rng_mutex);
+	if (is_new_current || !rng->init) {
 		/*
 		 * Use a new device's input to add some randomness to
 		 * the system.  If this rng device isn't going to be
@@ -508,6 +514,9 @@ int hwrng_register(struct hwrng *rng)
 		add_early_randomness(rng);
 	}
 
+	if (is_new_current)
+		put_rng(rng);
+	return 0;
 out_unlock:
 	mutex_unlock(&rng_mutex);
 out:
