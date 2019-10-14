@@ -241,6 +241,26 @@ static DEFINE_PER_CPU(struct crng, crngs) = {
 	.generation = ULONG_MAX
 };
 
+/*
+ * Return the interval until the next reseeding, which is normally
+ * CRNG_RESEED_INTERVAL, but during early boot, it is at an interval
+ * proportional to the uptime.
+ */
+static unsigned int crng_reseed_interval(void)
+{
+	static bool early_boot = true;
+
+	if (unlikely(READ_ONCE(early_boot))) {
+		time64_t uptime = ktime_get_seconds();
+		if (uptime >= CRNG_RESEED_INTERVAL / HZ * 2)
+			WRITE_ONCE(early_boot, false);
+		else
+			return max_t(unsigned int, CRNG_RESEED_START_INTERVAL,
+				     (unsigned int)uptime / 2 * HZ);
+	}
+	return CRNG_RESEED_INTERVAL;
+}
+
 /* Used by crng_reseed() and crng_make_state() to extract a new seed from the input pool. */
 static void extract_entropy(void *buf, size_t len);
 
@@ -871,11 +891,8 @@ EXPORT_SYMBOL(add_device_randomness);
  * may produce endless random bits, so this function will sleep for
  * some amount of time after, if the sleep_after parameter is true.
  */
-<<<<<<< HEAD
-void add_hwgenerator_randomness(const void *buf, size_t len, size_t entropy)
-=======
+
 void add_hwgenerator_randomness(const char *buf, size_t len, size_t entropy, bool sleep_after)
->>>>>>> f015f4ccc3f6c (hw_random: use add_hwgenerator_randomness() for early entropy)
 {
 	mix_pool_bytes(buf, len);
 	credit_init_bits(entropy);
@@ -884,15 +901,9 @@ void add_hwgenerator_randomness(const char *buf, size_t len, size_t entropy, boo
 	 * Throttle writing to once every CRNG_RESEED_INTERVAL, unless
 	 * we're not yet initialized.
 	 */
-<<<<<<< HEAD
-	if ((current->flags & PF_KTHREAD) &&
-	    !kthread_should_stop() && crng_ready())
-		schedule_timeout_interruptible(CRNG_RESEED_INTERVAL);
-=======
 	if ((current->flags & PF_KTHREAD) && sleep_after &&
 	    !kthread_should_stop() && (crng_ready() || !entropy))
 		schedule_timeout_interruptible(crng_reseed_interval());
->>>>>>> f015f4ccc3f6c (hw_random: use add_hwgenerator_randomness() for early entropy)
 }
 EXPORT_SYMBOL_GPL(add_hwgenerator_randomness);
 
