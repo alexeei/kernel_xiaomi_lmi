@@ -1689,6 +1689,7 @@ TRACE_EVENT(sched_isolate,
 		__entry->time, __entry->isolate)
 );
 
+
 #ifdef CONFIG_CPUFREQ_GOV_SCHEDUTILX_TARGET_LOAD
 TRACE_EVENT(sugov_next_freq_tl,
 	    TP_PROTO(unsigned int cpu, unsigned long util, unsigned long max,
@@ -1748,6 +1749,12 @@ TRACE_EVENT(choose_freq,
 		      __entry->index)
 );
 #endif
+
+
+DECLARE_TRACE(pelt_thermal_tp,
+	TP_PROTO(struct rq *rq),
+	TP_ARGS(rq));
+
 
 #include "walt.h"
 #endif /* CONFIG_SMP */
