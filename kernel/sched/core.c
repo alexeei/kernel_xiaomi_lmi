@@ -3937,8 +3937,11 @@ void scheduler_tick(void)
 	u64 wallclock;
 	bool early_notif;
 	u32 old_load;
+#ifdef CONFIG_SCHED_WALT
 	struct related_thread_group *grp;
+#endif
 	unsigned int flag = 0;
+	unsigned long thermal_pressure;
 
 	sched_clock_tick();
 
@@ -3949,6 +3952,8 @@ void scheduler_tick(void)
 	wallclock = sched_ktime_clock();
 	update_task_ravg(rq->curr, rq, TASK_UPDATE, wallclock, 0);
 	update_rq_clock(rq);
+	thermal_pressure = arch_scale_thermal_pressure(cpu_of(rq));
+	update_thermal_load_avg(rq_clock_task(rq), rq, thermal_pressure);
 	curr->sched_class->task_tick(rq, curr, 0);
 	cpu_load_update_active(rq);
 	calc_global_load_tick(rq);
@@ -3967,7 +3972,7 @@ void scheduler_tick(void)
 	rq->idle_balance = idle_cpu(cpu);
 	trigger_load_balance(rq);
 #endif
-
+#ifdef CONFIG_SCHED_WALT
 	rcu_read_lock();
 	grp = task_related_thread_group(curr);
 	if (update_preferred_cluster(grp, curr, old_load, true))
@@ -3976,6 +3981,7 @@ void scheduler_tick(void)
 
 	if (curr->sched_class == &fair_sched_class)
 		check_for_migration(rq, curr);
+#endif
 }
 
 #ifdef CONFIG_NO_HZ_FULL
