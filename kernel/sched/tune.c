@@ -781,25 +781,6 @@ boost_write(struct cgroup_subsys_state *css, struct cftype *cft,
 }
 
 #ifdef CONFIG_STUNE_ASSIST
-#ifdef CONFIG_SCHED_WALT
-static int sched_boost_override_write_wrapper(struct cgroup_subsys_state *css,
-		      			struct cftype *cft, u64 override)
-{
-	if (task_is_booster(current))
-		return 0;
-
-	return sched_boost_override_write(css, cft, override);
-}
-
-static int sched_colocate_write_wrapper(struct cgroup_subsys_state *css,
-					struct cftype *cft, u64 colocate)
-{
-	if (task_is_booster(current))
-		return 0;
-
-	return sched_colocate_write(css, cft, colocate);
-}
-#endif
 
 static int boost_write_wrapper(struct cgroup_subsys_state *css,
        			struct cftype *cft, s64 boost)
