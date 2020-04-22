@@ -6279,7 +6279,6 @@ void sde_encoder_save_vsync_info(struct sde_encoder_phys *phys_enc)
 	calc_vsync->vsync_count %= MAX_VSYNC_COUNT;
 }
 
-
 void sde_encoder_trigger_early_wakeup(struct drm_encoder *drm_enc)
 {
 	struct sde_encoder_virt *sde_enc = NULL;
@@ -6298,6 +6297,7 @@ void sde_encoder_trigger_early_wakeup(struct drm_encoder *drm_enc)
 
 	if (sde_enc->rc_state == SDE_ENC_RC_STATE_IDLE ||
 		sde_enc->rc_state == SDE_ENC_RC_STATE_ON) {
+
 		SDE_ATRACE_BEGIN("sde_encoder_resource_control");
 		sde_encoder_resource_control(drm_enc,
 					SDE_ENC_RC_EVENT_EARLY_WAKEUP);
