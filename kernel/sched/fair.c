@@ -3990,7 +3990,6 @@ static inline bool task_fits_max(struct task_struct *p, int cpu)
 	if (is_min_capacity_cpu(cpu)) {
 		if (task_boost_policy(p) == SCHED_BOOST_ON_BIG ||
 			task_boost > 0 ||
-			schedtune_task_boost(p) > 0 ||
 			walt_should_kick_upmigrate(p, cpu))
 			return false;
 	} else { /* mid cap cpu */
@@ -7054,6 +7053,7 @@ static void find_best_target(struct sched_domain *sd, cpumask_t *cpus,
 	unsigned int target_nr_rtg_high_prio = UINT_MAX;
 	bool rtg_high_prio_task = task_rtg_high_prio(p);
 	struct task_struct *curr_tsk;
+	int mid_cap_orig_cpu = cpu_rq(smp_processor_id())->rd->mid_cap_orig_cpu;
 
 	/*
 	 * In most cases, target_capacity tracks capacity_orig of the most
@@ -7211,6 +7211,9 @@ static void find_best_target(struct sched_domain *sd, cpumask_t *cpus,
 				 * - for !boosted tasks: the most energy
 				 * efficient CPU (i.e. smallest capacity_orig)
 				 */
+				 if (boosted && mid_cap_orig_cpu != -1 &&
+					best_idle_cpu == mid_cap_orig_cpu)
+					break;
 				if (idle_cpu(i)) {
 					if (boosted &&
 					    capacity_orig < target_capacity)
@@ -7265,7 +7268,7 @@ static void find_best_target(struct sched_domain *sd, cpumask_t *cpus,
 				 * demand
 				 */
 				if (new_util == best_active_util &&
-				    new_util_cuml > best_active_cuml_util)
+				    new_util_cuml >= best_active_cuml_util)
 					continue;
 				min_wake_util = wake_util;
 				best_active_util = new_util;
@@ -7328,13 +7331,13 @@ static void find_best_target(struct sched_domain *sd, cpumask_t *cpus,
 				best_idle_cpu = i;
 				continue;
 			}
-
+#ifdef CONFIG_SCHED_WALT
 			/*
 			 * Consider only idle CPUs for active migration.
 			 */
 			if (p->state == TASK_RUNNING)
 				continue;
-
+#endif
 			/*
 			 * Case C) Non latency sensitive tasks on ACTIVE CPUs.
 			 *
@@ -7420,7 +7423,9 @@ static void find_best_target(struct sched_domain *sd, cpumask_t *cpus,
 		    (boosted && (best_idle_cpu != -1 || target_cpu != -1 ||
 		     (fbt_env->strict_max && most_spare_cap_cpu != -1)))) {
 			if (boosted) {
-				if (!next_group_higher_cap)
+				if ((mid_cap_orig_cpu != -1 &&
+					best_idle_cpu >= mid_cap_orig_cpu) ||
+					!next_group_higher_cap)
 					break;
 			} else {
 				if (next_group_higher_cap)
@@ -7429,6 +7434,19 @@ static void find_best_target(struct sched_domain *sd, cpumask_t *cpus,
 		}
 
 	} while (sg = sg->next, sg != start_sd->groups);
+
+    if (prefer_idle && (best_idle_cpu != -1)) {
+		target_cpu = best_idle_cpu;
+		goto target;
+	}
+
+        if (target_cpu != -1 && !idle_cpu(target_cpu) &&
+                        best_idle_cpu != -1) {
+                curr_tsk = READ_ONCE(cpu_rq(target_cpu)->curr);
+                if (curr_tsk && schedtune_task_boost_rcu_locked(curr_tsk)) {
+                        target_cpu = best_idle_cpu;
+                }
+        }
 
 	adjust_cpus_for_packing(p, &target_cpu, &best_idle_cpu,
 				shallowest_idle_cstate,
@@ -7455,19 +7473,7 @@ static void find_best_target(struct sched_domain *sd, cpumask_t *cpus,
 	 *   b) IDLE CPU: best_idle_cpu
 	 */
 
-	if (target_cpu != -1 && !idle_cpu(target_cpu) &&
-
-			best_idle_cpu != -1) {
-		curr_tsk = READ_ONCE(cpu_rq(target_cpu)->curr);
-		if (curr_tsk && schedtune_task_boost_rcu_locked(curr_tsk)) {
-			target_cpu = best_idle_cpu;
-		}
-	}
-
-	if (prefer_idle && (best_idle_cpu != -1)) {
-		target_cpu = best_idle_cpu;
-		goto target;
-	}
+	
 
 	if (target_cpu == -1)
 		target_cpu = prefer_idle
@@ -7477,12 +7483,12 @@ static void find_best_target(struct sched_domain *sd, cpumask_t *cpus,
 		backup_cpu = prefer_idle
 		? best_active_cpu
 		: best_idle_cpu;
-
+#ifdef CONFIG_SCHED_WALT
 	if (target_cpu == -1 && most_spare_cap_cpu != -1 &&
 		/* ensure we use active cpu for active migration */
 		!(p->state == TASK_RUNNING && !idle_cpu(most_spare_cap_cpu)))
 		target_cpu = most_spare_cap_cpu;
-
+#endif
 	if (target_cpu == -1 && isolated_candidate != -1 &&
 					cpu_isolated(prev_cpu))
 		target_cpu = isolated_candidate;
@@ -7901,8 +7907,7 @@ static int find_energy_efficient_cpu(struct task_struct *p, int prev_cpu,
 		goto fail;
 
 	sync_entity_load_avg(&p->se);
-	if (!task_util_est(p))
-		goto unlock;
+
 
 	if (sched_feat(FIND_BEST_TARGET)) {
 		fbt_env.is_rtg = is_rtg;
