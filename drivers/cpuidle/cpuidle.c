@@ -250,10 +250,9 @@ int cpuidle_enter_state(struct cpuidle_device *dev, struct cpuidle_driver *drv,
 	time_start = ns_to_ktime(local_clock());
 
 	stop_critical_timings();
-	cpuidle_set_idle_cpu(dev->cpu);
 	rcu_idle_enter();
 	entered_state = target_state->enter(dev, drv, index);
-	cpuidle_clear_idle_cpu(dev->cpu);
+
 	rcu_idle_exit();
 	start_critical_timings();
 
