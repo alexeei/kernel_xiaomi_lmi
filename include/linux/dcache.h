@@ -74,9 +74,13 @@ extern struct dentry_stat_t dentry_stat;
  * give reasonable cacheline footprint with larger lines without the
  * large memory footprint increase).
  */
-#ifdef CONFIG_64BIT
+
+#ifdef CONFIG_ARM64
 # define DNAME_INLINE_LEN 96 /* 256 bytes */
 #else
+# define DNAME_INLINE_LEN 32 /* 192 bytes */
+#endif
+#else /* CONFIG_64BIT */
 # ifdef CONFIG_SMP
 #  define DNAME_INLINE_LEN 36 /* 128 bytes */
 # else
