@@ -134,7 +134,8 @@ static int ipa2_smmu_map_peer_bam(unsigned long dev)
 	u32 size;
 	struct iommu_domain *smmu_domain;
 
-	struct ipa_smmu_cb_ctx *cb = ipa2_get_smmu_ctx();
+	struct ipa_smmu_cb_ctx *cb = ipa2_get_smmu_ctx(IPA_SMMU_CB_AP);
+
 
 
 	if (!ipa_ctx->smmu_s1_bypass) {
@@ -532,7 +533,8 @@ static int ipa2_smmu_unmap_peer_bam(unsigned long dev)
 	size_t len;
 	struct iommu_domain *smmu_domain;
 
-	struct ipa_smmu_cb_ctx *cb = ipa2_get_smmu_ctx();
+	struct ipa_smmu_cb_ctx *cb = ipa2_get_smmu_ctx(IPA_SMMU_CB_AP);
+
 
 
 	if (!ipa_ctx->smmu_s1_bypass) {

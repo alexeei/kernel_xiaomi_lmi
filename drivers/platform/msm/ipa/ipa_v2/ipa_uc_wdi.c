@@ -466,7 +466,7 @@ static int ipa_create_uc_smmu_mapping_pa(phys_addr_t pa, size_t len,
 	}
 
 
-	ret = ipa_iommu_map(cb->mapping->domain, va, rounddown(pa, PAGE_SIZE),
+	ret = ipa_iommu_map(cb->iommu_domain, va, rounddown(pa, PAGE_SIZE),
 
 			true_len,
 			device ? (prot | IOMMU_MMIO) : prot);
@@ -507,7 +507,9 @@ static int ipa_create_uc_smmu_mapping_sgt(struct sg_table *sgt,
 	for_each_sg(sgt->sgl, sg, sgt->nents, i) {
 		phys = page_to_phys(sg_page(sg));
 		len = PAGE_ALIGN(sg->offset + sg->length);
-		ret = ipa_iommu_map(cb->mapping->domain, va, phys, len, prot);
+
+
+		ret = ipa_iommu_map(cb->iommu_domain, va, phys, len, prot);
 
 		if (ret) {
 			IPAERR("iommu map failed for pa=%pa len=%zu\n",
@@ -525,7 +527,8 @@ static int ipa_create_uc_smmu_mapping_sgt(struct sg_table *sgt,
 
 bad_mapping:
 	for_each_sg(sgt->sgl, sg, count, i)
-		iommu_unmap(cb->mapping->domain, sg_dma_address(sg),
+
+		iommu_unmap(cb->iommu_domain, sg_dma_address(sg),
 
 				sg_dma_len(sg));
 	return -EINVAL;
@@ -554,7 +557,7 @@ static void ipa_release_uc_smmu_mappings(enum ipa_client_type client)
 		if (wdi_res[i].valid) {
 			for (j = 0; j < wdi_res[i].nents; j++) {
 
-				iommu_unmap(cb->mapping->domain,
+				iommu_unmap(cb->iommu_domain,
 
 					wdi_res[i].res[j].iova,
 					wdi_res[i].res[j].size);
@@ -1860,7 +1863,7 @@ int ipa2_create_wdi_mapping(u32 num_buffers, struct ipa_wdi_buffer_info *info)
 		IPADBG("i=%d pa=0x%pa iova=0x%lx sz=0x%zx\n", i,
 			&info[i].pa, info[i].iova, info[i].size);
 
-		info[i].result = ipa_iommu_map(cb->iommu,
+		info[i].result = ipa_iommu_map(cb->iommu_domain,
 
 			rounddown(info[i].iova, PAGE_SIZE),
 			rounddown(info[i].pa, PAGE_SIZE),
@@ -1892,7 +1895,7 @@ int ipa2_release_wdi_mapping(u32 num_buffers, struct ipa_wdi_buffer_info *info)
 		IPADBG("i=%d pa=0x%pa iova=0x%lx sz=0x%zx\n", i,
 			&info[i].pa, info[i].iova, info[i].size);
 
-		info[i].result = iommu_unmap(cb->iommu,
+		info[i].result = iommu_unmap(cb->iommu_domain,
 
 			rounddown(info[i].iova, PAGE_SIZE),
 			roundup(info[i].size + info[i].pa -
