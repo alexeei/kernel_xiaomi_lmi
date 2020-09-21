@@ -2752,7 +2752,7 @@ try_to_wake_up(struct task_struct *p, unsigned int state, int wake_flags,
 
 	if (READ_ONCE(p->on_rq)) {
 		if (ttwu_remote(p, wake_flags))
-			goto unlock;
+			goto stat;
 	        if (p->state & TASK_UNINTERRUPTIBLE)
         	        trace_sched_blocked_reason(p);
 
