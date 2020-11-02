@@ -470,6 +470,17 @@ int rpmh_rsc_send_data(struct rsc_drv *drv, const struct tcs_request *msg)
 		ret = tcs_write(drv, msg);
 		if (ret == -EBUSY) {
 
+			pr_debug("DRV:%s TCS Busy, retrying RPMH message send: addr=%#x\n",
+					    drv->name, msg->cmds[0].addr);
+			udelay(10);
+			count++;
+		}
+		if ((count == 50000) && (in_long_press)) {
+			printk(KERN_ERR "Long Press :TCS Busy but log saved!");
+			break;
+		}
+
+
 #ifdef QCOM_RPMH_QGKI_DEBUG
 			bool irq_sts;
 
