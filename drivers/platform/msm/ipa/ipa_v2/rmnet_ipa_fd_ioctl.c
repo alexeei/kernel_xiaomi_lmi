@@ -323,7 +323,8 @@ static long wan_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		retval = -ENOTTY;
 	}
 
-	kfree(param);
+	if (!IS_ERR(param))
+		kvfree(param);
 
 	return retval;
 }
