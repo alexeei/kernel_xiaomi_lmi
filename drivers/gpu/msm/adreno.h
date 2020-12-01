@@ -795,7 +795,9 @@ struct adreno_coresight_attr {
 	struct adreno_coresight_register *reg;
 };
 
-#if IS_ENABLED(CONFIG_CORESIGHT_ADRENO)
+
+#if IS_ENABLED(CONFIG_CORESIGHT_ARDENO)
+
 ssize_t adreno_coresight_show_register(struct device *device,
 		struct device_attribute *attr, char *buf);
 
