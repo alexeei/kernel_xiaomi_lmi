@@ -36,45 +36,6 @@
 static struct kmem_cache *memobjs_cache;
 static struct kmem_cache *sparseobjs_cache;
 
-static void syncobj_destroy_object(struct kgsl_drawobj *drawobj)
-{
-	struct kgsl_drawobj_sync *syncobj = SYNCOBJ(drawobj);
-	int i;
-
-	for (i = 0; i < syncobj->numsyncs; i++) {
-		struct kgsl_drawobj_sync_event *event = &syncobj->synclist[i];
-
-		if (event->type == KGSL_CMD_SYNCPOINT_TYPE_FENCE) {
-			struct event_fence_info *priv = event ?
-					event->priv : NULL;
-
-			if (priv) {
-				kfree(priv->fences);
-				kfree(priv);
-			}
-		} else if (event->type == KGSL_CMD_SYNCPOINT_TYPE_TIMELINE) {
-			kfree(event->priv);
-		}
-	}
-
-	kfree(syncobj->synclist);
-	kfree(syncobj);
-}
-
-static void cmdobj_destroy_object(struct kgsl_drawobj *drawobj)
-{
-	kfree(CMDOBJ(drawobj));
-}
-
-static void timelineobj_destroy_object(struct kgsl_drawobj *drawobj)
-{
-	kfree(TIMELINEOBJ(drawobj));
-}
-
-static void sparseobj_destroy_object(struct kgsl_drawobj *drawobj)
-{
-	kfree(SPARSEOBJ(drawobj));
-}
 
 void kgsl_drawobj_destroy_object(struct kref *kref)
 {
@@ -82,7 +43,23 @@ void kgsl_drawobj_destroy_object(struct kref *kref)
 		struct kgsl_drawobj, refcount);
 
 	kgsl_context_put(drawobj->context);
-	drawobj->destroy_object(drawobj);
+
+
+	switch (drawobj->type) {
+	case SYNCOBJ_TYPE:
+		syncobj = SYNCOBJ(drawobj);
+		kfree(syncobj->synclist);
+		kfree(syncobj);
+		break;
+	case CMDOBJ_TYPE:
+	case MARKEROBJ_TYPE:
+		kfree(CMDOBJ(drawobj));
+		break;
+	case SPARSEOBJ_TYPE:
+		kfree(SPARSEOBJ(drawobj));
+		break;
+	}
+
 }
 
 void kgsl_dump_syncpoints(struct kgsl_device *device,
@@ -112,13 +89,7 @@ void kgsl_dump_syncpoints(struct kgsl_device *device,
 			break;
 		}
 		case KGSL_CMD_SYNCPOINT_TYPE_FENCE: {
-			int j;
-			struct event_fence_info *info = event ?
-					event->priv : NULL;
 
-			for (j = 0; info && j < info->num_fences; j++)
-				dev_err(device->dev, "[%d]  fence: %s\n",
-					i, info->fences[j].name);
 			break;
 		}
 		case KGSL_CMD_SYNCPOINT_TYPE_TIMELINE: {
@@ -179,13 +150,7 @@ static void syncobj_timer(struct timer_list *t)
 				i, event->context->id, event->timestamp);
 			break;
 		case KGSL_CMD_SYNCPOINT_TYPE_FENCE: {
-			int j;
-			struct event_fence_info *info = event ?
-					event->priv : NULL;
 
-			for (j = 0; info && j < info->num_fences; j++)
-				dev_err(device->dev, "       [%u] FENCE %s\n",
-					i, info->fences[j].name);
 			break;
 		}
 		case KGSL_CMD_SYNCPOINT_TYPE_TIMELINE: {
@@ -421,12 +386,7 @@ EXPORT_SYMBOL(kgsl_drawobj_destroy);
 static bool drawobj_sync_fence_func(void *priv)
 {
 	struct kgsl_drawobj_sync_event *event = priv;
-	struct event_fence_info *info = event ? event->priv : NULL;
-	int i;
 
-	for (i = 0; info && i < info->num_fences; i++)
-		trace_syncpoint_fence_expire(event->syncobj,
-			info->fences[i].name);
 
 	/*
 	 * Only call kgsl_drawobj_put() if it's not marked for cancellation
@@ -535,8 +495,9 @@ static int drawobj_add_sync_fence(struct kgsl_device *device,
 	struct kgsl_cmd_syncpoint_fence sync;
 	struct kgsl_drawobj *drawobj = DRAWOBJ(syncobj);
 	struct kgsl_drawobj_sync_event *event;
-	struct event_fence_info *priv;
-	unsigned int id, i;
+
+	unsigned int id;
+
 
 	if (kgsl_copy_struct_from_user(&sync, sizeof(sync), data, datasize))
 		return -EFAULT;
@@ -557,10 +518,9 @@ static int drawobj_add_sync_fence(struct kgsl_device *device,
 
 	set_bit(event->id, &syncobj->pending);
 
-	event->handle = kgsl_sync_fence_async_wait(sync.fd,
-				drawobj_sync_fence_func, event, priv);
 
-	event->priv = priv;
+	event->handle = kgsl_sync_fence_async_wait(sync->fd,
+				drawobj_sync_fence_func, event);
 
 	if (IS_ERR_OR_NULL(event->handle)) {
 		int ret = PTR_ERR(event->handle);
@@ -580,8 +540,6 @@ static int drawobj_add_sync_fence(struct kgsl_device *device,
 		return ret;
 	}
 
-	for (i = 0; priv && i < priv->num_fences; i++)
-		trace_syncpoint_fence(syncobj, priv->fences[i].name);
 
 	return 0;
 }
