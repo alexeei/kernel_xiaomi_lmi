@@ -457,17 +457,19 @@ static int z_erofs_attach_page(struct z_erofs_collector *clt,
 
 }
 
-static void z_erofs_try_to_claim_pcluster(struct z_erofs_decompress_frontend *f)
+
+static void z_erofs_try_to_claim_pcluster(struct z_erofs_collector *clt)
 {
-	struct z_erofs_pcluster *pcl = f->pcl;
-	z_erofs_next_pcluster_t *owned_head = &f->owned_head;
+	struct z_erofs_pcluster *pcl = clt->pcl;
+	z_erofs_next_pcluster_t *owned_head = &clt->owned_head;
+
 
 	/* type 1, nil pcluster (this pcluster doesn't belong to any chain.) */
 	if (cmpxchg(&pcl->next, Z_EROFS_PCLUSTER_NIL,
 		    *owned_head) == Z_EROFS_PCLUSTER_NIL) {
 		*owned_head = &pcl->next;
 		/* so we can attach this pcluster to our submission chain. */
-		f->mode = Z_EROFS_PCLUSTER_FOLLOWED;
+		clt->mode = COLLECT_PRIMARY_FOLLOWED;
 		return;
 	}
 
@@ -475,16 +477,15 @@ static void z_erofs_try_to_claim_pcluster(struct z_erofs_decompress_frontend *f)
 	 * type 2, link to the end of an existing open chain, be careful
 	 * that its submission is controlled by the original attached chain.
 	 */
-	if (*owned_head != &pcl->next && pcl != f->tailpcl &&
-	    cmpxchg(&pcl->next, Z_EROFS_PCLUSTER_TAIL,
+	if (cmpxchg(&pcl->next, Z_EROFS_PCLUSTER_TAIL,
 		    *owned_head) == Z_EROFS_PCLUSTER_TAIL) {
 		*owned_head = Z_EROFS_PCLUSTER_TAIL;
-		f->mode = Z_EROFS_PCLUSTER_HOOKED;
-		f->tailpcl = NULL;
+		clt->mode = COLLECT_PRIMARY_HOOKED;
+		clt->tailpcl = NULL;
 		return;
 	}
 	/* type 3, it belongs to a chain, but it isn't the end of the chain */
-	f->mode = Z_EROFS_PCLUSTER_INFLIGHT;
+	clt->mode = COLLECT_PRIMARY;
 }
 
 static int z_erofs_register_pcluster(struct z_erofs_decompress_frontend *fe)
@@ -493,6 +494,64 @@ static int z_erofs_register_pcluster(struct z_erofs_decompress_frontend *fe)
 	bool ztailpacking = map->m_flags & EROFS_MAP_META;
 	struct z_erofs_pcluster *pcl;
 	struct erofs_workgroup *grp;
+	struct z_erofs_pcluster *pcl;
+	struct z_erofs_collection *cl;
+	unsigned int length;
+
+	grp = erofs_find_workgroup(inode->i_sb, map->m_pa >> PAGE_SHIFT);
+	if (!grp)
+		return -ENOENT;
+
+	pcl = container_of(grp, struct z_erofs_pcluster, obj);
+	if (clt->owned_head == &pcl->next || pcl == clt->tailpcl) {
+		DBG_BUGON(1);
+		erofs_workgroup_put(grp);
+		return -EFSCORRUPTED;
+	}
+
+	cl = z_erofs_primarycollection(pcl);
+	if (cl->pageofs != (map->m_la & ~PAGE_MASK)) {
+		DBG_BUGON(1);
+		erofs_workgroup_put(grp);
+		return -EFSCORRUPTED;
+	}
+
+	length = READ_ONCE(pcl->length);
+	if (length & Z_EROFS_PCLUSTER_FULL_LENGTH) {
+		if ((map->m_llen << Z_EROFS_PCLUSTER_LENGTH_BIT) > length) {
+			DBG_BUGON(1);
+			erofs_workgroup_put(grp);
+			return -EFSCORRUPTED;
+		}
+	} else {
+		unsigned int llen = map->m_llen << Z_EROFS_PCLUSTER_LENGTH_BIT;
+
+		if (map->m_flags & EROFS_MAP_FULL_MAPPED)
+			llen |= Z_EROFS_PCLUSTER_FULL_LENGTH;
+
+		while (llen > length &&
+		       length != cmpxchg_relaxed(&pcl->length, length, llen)) {
+			cpu_relax();
+			length = READ_ONCE(pcl->length);
+		}
+	}
+	mutex_lock(&cl->lock);
+	/* used to check tail merging loop due to corrupted images */
+	if (clt->owned_head == Z_EROFS_PCLUSTER_TAIL)
+		clt->tailpcl = pcl;
+	clt->pcl = pcl;
+	z_erofs_try_to_claim_pcluster(clt);
+	clt->pcl = pcl;
+	clt->cl = cl;
+	return 0;
+}
+
+static int z_erofs_register_collection(struct z_erofs_collector *clt,
+				       struct inode *inode,
+				       struct erofs_map_blocks *map)
+{
+	struct z_erofs_pcluster *pcl;
+	struct z_erofs_collection *cl;
 	int err;
 
 	if (!(map->m_flags & EROFS_MAP_ENCODED)) {
