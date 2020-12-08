@@ -384,8 +384,10 @@ int erofs_try_to_free_all_cached_pages(struct erofs_sb_info *sbi,
 			continue;
 
 		/* barrier is implied in the following 'unlock_page' */
-		WRITE_ONCE(pcl->compressed_bvecs[i].page, NULL);
-		detach_page_private(page);
+		WRITE_ONCE(pcl->compressed_pages[i], NULL);
+
+		set_page_private(page, 0);
+		ClearPagePrivate(page);
 		unlock_page(page);
 	}
 	return 0;
@@ -398,14 +400,19 @@ int erofs_try_to_free_cached_page(struct page *page)
 
 	if (!erofs_workgroup_try_to_freeze(&pcl->obj, 1))
 		return 0;
+		for (i = 0; i < clusterpages; ++i) {
+			if (pcl->compressed_pages[i] == page) {
+				WRITE_ONCE(pcl->compressed_pages[i], NULL);
+				ret = 1;
+				break;
+			}
+		}
+		erofs_workgroup_unfreeze(&pcl->obj, 1);
 
-	ret = 0;
-	DBG_BUGON(z_erofs_is_inline_pcluster(pcl));
-	for (i = 0; i < pcl->pclusterpages; ++i) {
-		if (pcl->compressed_bvecs[i].page == page) {
-			WRITE_ONCE(pcl->compressed_bvecs[i].page, NULL);
-			ret = 1;
-			break;
+		if (ret) {
+			set_page_private(page, 0);
+			ClearPagePrivate(page);
+			put_page(page);
 		}
 	}
 	erofs_workgroup_unfreeze(&pcl->obj, 1);
@@ -746,12 +753,12 @@ retry:
 
 	err = z_erofs_attach_page(clt, page, page_type,
 				  clt->mode >= COLLECT_PRIMARY_FOLLOWED);
-	/* should allocate an additional staging page for pagevec */
+	/* should allocate an additional short-lived page for pagevec */
 	if (err == -EAGAIN) {
 		struct page *const newpage =
 				alloc_page(GFP_NOFS | __GFP_NOFAIL);
 
-		newpage->mapping = Z_EROFS_MAPPING_STAGING;
+		set_page_private(newpage, Z_EROFS_SHORTLIVED_PAGE);
 		err = z_erofs_attach_page(clt, newpage,
 					  Z_EROFS_PAGE_TYPE_EXCLUSIVE, true);
 		if (!err)
@@ -859,8 +866,13 @@ static void z_erofs_do_decompressed_bvec(struct z_erofs_decompress_backend *be,
 	list_add(&item->list, &be->decompressed_secondary_bvecs);
 }
 
-static void z_erofs_fill_other_copies(struct z_erofs_decompress_backend *be,
-				      int err)
+
+static bool z_erofs_page_is_invalidated(struct page *page)
+{
+	return !page->mapping && !z_erofs_is_shortlived_page(page);
+}
+
+static void z_erofs_decompressqueue_endio(struct bio *bio)
 {
 	unsigned int off0 = be->pcl->pageofs_out;
 	struct list_head *p, *n;
@@ -870,13 +882,8 @@ static void z_erofs_fill_other_copies(struct z_erofs_decompress_backend *be,
 		unsigned int end, cur;
 		void *dst, *src;
 
-		bvi = container_of(p, struct z_erofs_bvec_item, list);
-		cur = bvi->bvec.offset < 0 ? -bvi->bvec.offset : 0;
-		end = min_t(unsigned int, be->pcl->length - bvi->bvec.offset,
-			    bvi->bvec.end);
-		dst = kmap(bvi->bvec.page);
-		while (cur < end) {
-			unsigned int pgnr, scur, len;
+		DBG_BUGON(PageUptodate(page));
+		DBG_BUGON(z_erofs_page_is_invalidated(page));
 
 			pgnr = (bvi->bvec.offset + cur + off0) >> PAGE_SHIFT;
 			DBG_BUGON(pgnr >= be->nr_pages);
@@ -939,9 +946,27 @@ static int z_erofs_parse_in_bvecs(struct z_erofs_decompress_backend *be,
 	for (i = 0; i < pclusterpages; ++i) {
 		struct z_erofs_bvec *bvec = &pcl->compressed_bvecs[i];
 		struct page *page = bvec->page;
+		page = z_erofs_pagevec_dequeue(&ctor, &page_type);
 
-		/* compressed pages ought to be present before decompressing */
-		if (!page) {
+		/* all pages in pagevec ought to be valid */
+		DBG_BUGON(!page);
+		DBG_BUGON(z_erofs_page_is_invalidated(page));
+
+		if (z_erofs_put_shortlivedpage(pagepool, page))
+			continue;
+
+		if (page_type == Z_EROFS_VLE_PAGE_TYPE_HEAD)
+			pagenr = 0;
+		else
+			pagenr = z_erofs_onlinepage_index(page);
+
+		DBG_BUGON(pagenr >= nr_pages);
+
+		/*
+		 * currently EROFS doesn't support multiref(dedup),
+		 * so here erroring out one multiref page.
+		 */
+		if (pages[pagenr]) {
 			DBG_BUGON(1);
 			continue;
 		}
@@ -953,15 +978,46 @@ static int z_erofs_parse_in_bvecs(struct z_erofs_decompress_backend *be,
 			continue;
 		}
 
+
+	for (i = 0; i < clusterpages; ++i) {
+		unsigned int pagenr;
+
+		page = compressed_pages[i];
+
+		/* all compressed pages ought to be valid */
+		DBG_BUGON(!page);
 		DBG_BUGON(z_erofs_page_is_invalidated(page));
+
 		if (!z_erofs_is_shortlived_page(page)) {
-			if (erofs_page_is_managed(EROFS_SB(be->sb), page)) {
+			if (erofs_page_is_managed(sbi, page)) {
 				if (!PageUptodate(page))
 					err = -EIO;
 				continue;
 			}
-			z_erofs_do_decompressed_bvec(be, bvec);
-			*overlapped = true;
+
+
+			/*
+			 * only if non-head page can be selected
+			 * for inplace decompression
+			 */
+			pagenr = z_erofs_onlinepage_index(page);
+
+			DBG_BUGON(pagenr >= nr_pages);
+			if (pages[pagenr]) {
+				DBG_BUGON(1);
+				SetPageError(pages[pagenr]);
+				z_erofs_onlinepage_endio(pages[pagenr]);
+				err = -EFSCORRUPTED;
+			}
+			pages[pagenr] = page;
+
+			overlapped = true;
+		}
+
+		/* PG_error needs checking for all non-managed pages */
+		if (PageError(page)) {
+			DBG_BUGON(PageUptodate(page));
+			err = -EIO;
 		}
 	}
 
@@ -1046,10 +1102,10 @@ out:
 			if (erofs_page_is_managed(sbi, page))
 				continue;
 
-			/* recycle all individual short-lived pages */
-			(void)z_erofs_put_shortlivedpage(be->pagepool, page);
-			WRITE_ONCE(pcl->compressed_bvecs[i].page, NULL);
-		}
+		/* recycle all individual short-lived pages */
+		(void)z_erofs_put_shortlivedpage(pagepool, page);
+
+		WRITE_ONCE(compressed_pages[i], NULL);
 	}
 	if (be->compressed_pages < be->onstack_pages ||
 	    be->compressed_pages >= be->onstack_pages + Z_EROFS_ONSTACK_PAGES)
@@ -1064,7 +1120,7 @@ out:
 		DBG_BUGON(z_erofs_page_is_invalidated(page));
 
 		/* recycle all individual short-lived pages */
-		if (z_erofs_put_shortlivedpage(be->pagepool, page))
+		if (z_erofs_put_shortlivedpage(pagepool, page))
 			continue;
 		if (err)
 			z_erofs_page_mark_eio(page);
@@ -1242,9 +1298,20 @@ repeat:
 	put_page(page);
 out_allocpage:
 	page = erofs_allocpage(pagepool, gfp | __GFP_NOFAIL);
-	if (oldpage != cmpxchg(&pcl->compressed_bvecs[nr].page,
-			       oldpage, page)) {
-		erofs_pagepool_add(pagepool, page);
+	if (!tocache || add_to_page_cache_lru(page, mc, index + nr, gfp)) {
+		/* turn into temporary page if fails */
+		set_page_private(page, Z_EROFS_SHORTLIVED_PAGE);
+		tocache = false;
+	}
+
+	if (oldpage != cmpxchg(&pcl->compressed_pages[nr], oldpage, page)) {
+		if (tocache) {
+			/* since it added to managed cache successfully */
+			unlock_page(page);
+			put_page(page);
+		} else {
+			list_add(&page->lru, pagepool);
+		}
 		cond_resched();
 		goto repeat;
 	}

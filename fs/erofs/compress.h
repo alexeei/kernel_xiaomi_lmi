@@ -20,21 +20,15 @@ struct z_erofs_decompress_req {
 	bool inplace_io, partial_decoding, fillgaps;
 };
 
-struct z_erofs_decompressor {
-	int (*decompress)(struct z_erofs_decompress_req *rq,
-			  struct page **pagepool);
-	char *name;
-};
 
 /* some special page->private (unsigned long, see below) */
 #define Z_EROFS_SHORTLIVED_PAGE		(-1UL << 2)
-#define Z_EROFS_PREALLOCATED_PAGE	(-2UL << 2)
+
 
 /*
  * For all pages in a pcluster, page->private should be one of
  * Type                         Last 2bits      page->private
  * short-lived page             00              Z_EROFS_SHORTLIVED_PAGE
- * preallocated page (tryalloc) 00              Z_EROFS_PREALLOCATED_PAGE
  * cached/managed page          00              pointer to z_erofs_pcluster
  * online page (file-backed,    01/10/11        sub-index << 2 | count
  *              some pages can be used for inplace I/O)
@@ -42,7 +36,6 @@ struct z_erofs_decompressor {
  * page->mapping should be one of
  * Type                 page->mapping
  * short-lived page     NULL
- * preallocated page    NULL
  * cached/managed page  non-NULL or NULL (invalidated/truncated page)
  * online page          non-NULL
  *
@@ -61,6 +54,24 @@ static inline bool z_erofs_is_shortlived_page(struct page *page)
 		return false;
 
 	DBG_BUGON(page->mapping);
+	return true;
+}
+
+static inline bool z_erofs_put_shortlivedpage(struct list_head *pagepool,
+					      struct page *page)
+{
+	if (!z_erofs_is_shortlived_page(page))
+		return false;
+
+	/* short-lived pages should not be used by others at the same time */
+	if (page_ref_count(page) > 1) {
+		put_page(page);
+	} else {
+		/* follow the pcluster rule above. */
+		set_page_private(page, 0);
+		list_add(&page->lru, pagepool);
+	}
+
 	return true;
 }
 

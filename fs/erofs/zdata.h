@@ -163,8 +163,10 @@ static inline void z_erofs_onlinepage_endio(struct page *page)
 	unsigned int v;
 
 	DBG_BUGON(!PagePrivate(page));
-	v = atomic_dec_return((atomic_t *)&page->private);
-	if (!(v & ~Z_EROFS_PAGE_EIO)) {
+	u.v = &page_private(page);
+
+	v = atomic_dec_return(u.o);
+	if (!(v & Z_EROFS_ONLINEPAGE_COUNT_MASK)) {
 		set_page_private(page, 0);
 		ClearPagePrivate(page);
 		if (!(v & Z_EROFS_PAGE_EIO))
