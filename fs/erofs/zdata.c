@@ -177,6 +177,7 @@ static void z_erofs_free_pcluster(struct z_erofs_pcluster *pcl)
 /* how to allocate cached pages for a pcluster */
 enum z_erofs_cache_alloctype {
 	DONTALLOC,	/* don't allocate any cached pages */
+	DELAYEDALLOC,	/* delayed allocation (at the time of submitting io) */
 	/*
 	 * try to use cached I/O if page allocation succeeds or fallback
 	 * to in-place I/O instead to avoid any direct reclaim.
@@ -291,20 +292,19 @@ struct z_erofs_decompress_frontend {
 	.inode = __i, .owned_head = Z_EROFS_PCLUSTER_TAIL, \
 	.mode = Z_EROFS_PCLUSTER_FOLLOWED, .backmost = true }
 
-static void z_erofs_bind_cache(struct z_erofs_decompress_frontend *fe,
-			       enum z_erofs_cache_alloctype type,
-			       struct page **pagepool)
+static struct page *z_pagemap_global[Z_EROFS_VMAP_GLOBAL_PAGES];
+static DEFINE_MUTEX(z_pagemap_global_lock);
+
+static void preload_compressed_pages(struct z_erofs_collector *clt,
+				     struct address_space *mc,
+				     enum z_erofs_cache_alloctype type,
+				     struct list_head *pagepool)
 {
 	struct address_space *mc = MNGD_MAPPING(EROFS_I_SB(fe->inode));
 	struct z_erofs_pcluster *pcl = fe->pcl;
 	bool standalone = true;
-	/*
-	 * optimistic allocation without direct reclaim since inplace I/O
-	 * can be used if low memory otherwise.
-	 */
 	gfp_t gfp = (mapping_gfp_mask(mc) & ~__GFP_DIRECT_RECLAIM) |
 			__GFP_NOMEMALLOC | __GFP_NORETRY | __GFP_NOWARN;
-	unsigned int i;
 
 	if (fe->mode < Z_EROFS_PCLUSTER_FOLLOWED)
 		return;
@@ -322,8 +322,19 @@ static void z_erofs_bind_cache(struct z_erofs_decompress_frontend *fe,
 
 		if (page) {
 			t = tag_compressed_page_justfound(page);
-		} else {
-			/* I/O is needed, no possible to decompress directly */
+		} else if (type == DELAYEDALLOC) {
+			t = tagptr_init(compressed_page_t, PAGE_UNALLOCATED);
+		} else if (type == TRYALLOC) {
+			newpage = erofs_allocpage(pagepool, gfp);
+			if (!newpage)
+				goto dontalloc;
+
+			set_page_private(newpage, Z_EROFS_PREALLOCATED_PAGE);
+			t = tag_compressed_page_justfound(newpage);
+		} else {	/* DONTALLOC */
+dontalloc:
+			if (standalone)
+				clt->compressedpages = pages;
 			standalone = false;
 			switch (type) {
 			case TRYALLOC:
@@ -343,10 +354,12 @@ static void z_erofs_bind_cache(struct z_erofs_decompress_frontend *fe,
 				     tagptr_cast_ptr(t)))
 			continue;
 
-		if (page)
+		if (page) {
 			put_page(page);
-		else if (newpage)
-			erofs_pagepool_add(pagepool, newpage);
+		} else if (newpage) {
+			set_page_private(newpage, 0);
+			list_add(&newpage->lru, pagepool);
+		}
 	}
 
 	/*
@@ -719,7 +732,7 @@ static bool should_alloc_managed_pages(struct z_erofs_decompress_frontend *fe,
 }
 
 static int z_erofs_do_read_page(struct z_erofs_decompress_frontend *fe,
-				struct page *page, struct page **pagepool)
+				struct page *page, struct list_head *pagepool)
 {
 	struct inode *const inode = fe->inode;
 	struct erofs_sb_info *const sbi = EROFS_I_SB(inode);
@@ -763,28 +776,14 @@ repeat:
 	if (err)
 		goto out;
 
-	if (z_erofs_is_inline_pcluster(fe->pcl)) {
-		void *mp;
+	/* preload all compressed pages (maybe downgrade role if necessary) */
+	if (should_alloc_managed_pages(fe, sbi->cache_strategy, map->m_la))
+		cache_strategy = TRYALLOC;
+	else
+		cache_strategy = DONTALLOC;
 
-		mp = erofs_read_metabuf(&fe->map.buf, inode->i_sb,
-					erofs_blknr(map->m_pa), EROFS_NO_KMAP);
-		if (IS_ERR(mp)) {
-			err = PTR_ERR(mp);
-			erofs_err(inode->i_sb,
-				  "failed to get inline page, err %d", err);
-			goto out;
-		}
-		get_page(fe->map.buf.page);
-		WRITE_ONCE(fe->pcl->compressed_bvecs[0].page,
-			   fe->map.buf.page);
-		fe->mode = Z_EROFS_PCLUSTER_FOLLOWED_NOINPLACE;
-	} else {
-		/* bind cache first when cached decompression is preferred */
-		if (should_alloc_managed_pages(fe, sbi->cache_strategy,
-					       map->m_la))
-			cache_strategy = TRYALLOC;
-		else
-			cache_strategy = DONTALLOC;
+	preload_compressed_pages(clt, MNGD_MAPPING(sbi),
+				 cache_strategy, pagepool);
 
 		z_erofs_bind_cache(fe, cache_strategy, pagepool);
 	}
@@ -1296,7 +1295,7 @@ repeat:
 	 * otherwise, it will go inplace I/O path instead.
 	 */
 	if (page->private == Z_EROFS_PREALLOCATED_PAGE) {
-		WRITE_ONCE(pcl->compressed_bvecs[nr].page, page);
+		WRITE_ONCE(pcl->compressed_pages[nr], page);
 		set_page_private(page, 0);
 		tocache = true;
 		goto out_tocache;
@@ -1362,7 +1361,7 @@ out_allocpage:
 		cond_resched();
 		goto repeat;
 	}
-
+out_tocache:
 	if (!tocache || add_to_page_cache_lru(page, mc, index + nr, gfp)) {
 		/* turn into temporary page if fails (1 ref) */
 		set_page_private(page, Z_EROFS_SHORTLIVED_PAGE);
@@ -1671,13 +1670,8 @@ static int z_erofs_readpage(struct file *file, struct page *page)
 	int err;
 
 	f.headoffset = (erofs_off_t)page->index << PAGE_SHIFT;
-
-	z_erofs_pcluster_readmore(&f, NULL, f.headoffset + PAGE_SIZE - 1,
-				  &pagepool, true);
 	err = z_erofs_do_read_page(&f, page, &pagepool);
-	z_erofs_pcluster_readmore(&f, NULL, 0, &pagepool, false);
-
-	(void)z_erofs_collector_end(&f);
+	(void)z_erofs_collector_end(&f.clt);
 
 	/* if some compressed cluster ready, need submit them anyway */
 	z_erofs_runqueue(&f, &pagepool,
