@@ -1563,6 +1563,7 @@ void swap_writeback_list(struct zwbs **zwbs, struct list_head *list)
 
 #define PAGE_WB_SIG "page_index="
 
+
 #define PAGE_WRITEBACK 0
 #define HUGE_WRITEBACK 1
 #define IDLE_WRITEBACK 2
@@ -1589,8 +1590,10 @@ static ssize_t writeback_store(struct device *dev,
 		if (strncmp(buf, PAGE_WB_SIG, sizeof(PAGE_WB_SIG) - 1))
 			return -EINVAL;
 
+
 		if (kstrtol(buf + sizeof(PAGE_WB_SIG) - 1, 10, &index) ||
 				index >= nr_pages)
+
 			return -EINVAL;
 
 		nr_pages = 1;
@@ -1615,18 +1618,10 @@ static ssize_t writeback_store(struct device *dev,
 	}
 
 
-#ifdef CONFIG_ZRAM_LRU_WRITEBACK
-	if (mode == IDLE_WRITEBACK) {
-		if (is_bdev_avail(zram))
-			zram_comp_writeback(zram);
-		ret = len;
-		__free_page(page);
-		goto release_init_lock;
-	}
-#endif
 
 
 	for (; nr_pages != 0; index++, nr_pages--) {
+
 		struct bio_vec bvec;
 
 		bvec.bv_page = page;
