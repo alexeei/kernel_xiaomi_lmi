@@ -627,6 +627,8 @@ config RB5_GPIOS_ENABLE
 
 source "drivers/char/lrng/Kconfig"
 
+source "drivers/char/srandom/Kconfig"
+
 
 endmenu
 
