@@ -456,9 +456,12 @@ done_write:
  * Return: 0 on success, -EINVAL on error.
  * Note: This call blocks until a valid data is written to the TCS.
  */
+
+extern int in_long_press;
 int rpmh_rsc_send_data(struct rsc_drv *drv, const struct tcs_request *msg)
 {
 	int ret;
+	int count = 0;
 
 	if (!msg || !msg->cmds || !msg->num_cmds ||
 	    msg->num_cmds > MAX_RPMH_PAYLOAD) {
@@ -469,7 +472,6 @@ int rpmh_rsc_send_data(struct rsc_drv *drv, const struct tcs_request *msg)
 	do {
 		ret = tcs_write(drv, msg);
 		if (ret == -EBUSY) {
-
 			pr_debug("DRV:%s TCS Busy, retrying RPMH message send: addr=%#x\n",
 					    drv->name, msg->cmds[0].addr);
 			udelay(10);
@@ -480,19 +482,6 @@ int rpmh_rsc_send_data(struct rsc_drv *drv, const struct tcs_request *msg)
 			break;
 		}
 
-
-#ifdef QCOM_RPMH_QGKI_DEBUG
-			bool irq_sts;
-
-			irq_get_irqchip_state(drv->irq, IRQCHIP_STATE_PENDING,
-					      &irq_sts);
-			pr_info_ratelimited("DRV:%s TCS Busy, retrying RPMH message send: addr=%#x interrupt status=%s\n",
-					    drv->name, msg->cmds[0].addr,
-					    irq_sts ?
-					    "PENDING" : "NOT PENDING");
-#endif /* QCOM_RPMH_QGKI_DEBUG */
-			udelay(10);
-		}
 	} while (ret == -EBUSY);
 
 	return ret;
