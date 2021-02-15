@@ -233,27 +233,9 @@ struct smb5 {
 
 static struct smb_charger *__smbchg;
 
+#endif
 static int __debug_mask = 0;
 
-static BLOCKING_NOTIFIER_HEAD(pen_charge_state_notifier_list);
-
-int pen_charge_state_notifier_register_client(struct notifier_block *nb)
-{
-	return blocking_notifier_chain_register(&pen_charge_state_notifier_list, nb);
-}
-EXPORT_SYMBOL(pen_charge_state_notifier_register_client);
-
-int pen_charge_state_notifier_unregister_client(struct notifier_block *nb)
-{
-	return blocking_notifier_chain_unregister(&pen_charge_state_notifier_list, nb);
-}
-EXPORT_SYMBOL(pen_charge_state_notifier_unregister_client);
-
-int pen_charge_state_notifier_call_chain(unsigned long val, void *v)
-{
-	return blocking_notifier_call_chain(&pen_charge_state_notifier_list, val, v);
-}
-EXPORT_SYMBOL(pen_charge_state_notifier_call_chain);
 
 static ssize_t pd_disabled_show(struct device *dev, struct device_attribute
 				*attr, char *buf)

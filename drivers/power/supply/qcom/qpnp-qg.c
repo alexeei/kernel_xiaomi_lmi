@@ -38,7 +38,7 @@
 #include "qg-defs.h"
 #include <linux/proc_fs.h>
 
-static int qg_debug_mask;
+static int qg_debug_mask = 0;
 
 static struct external_battery_gauge *external_fg;
 
