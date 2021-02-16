@@ -2486,11 +2486,15 @@ static void rcu_spawn_one_nocb_kthread(struct rcu_state *rsp, int cpu)
 		rdp_spawn->nocb_next_follower = rdp_old_leader;
 	}
 
-	/* Spawn the kthread for this CPU and RCU flavor. */
-	t = kthread_run(rcu_nocb_kthread, rdp_spawn,
-			"rcuo%c/%d", rsp->abbr, cpu);
-	BUG_ON(IS_ERR(t));
-	WRITE_ONCE(rdp_spawn->nocb_kthread, t);
+
+	/* Spawn the kthread for this CPU. */
+	t = kthread_run_perf_critical(cpu_lp_mask, rcu_nocb_cb_kthread, rdp,
+				      "rcuo%c/%d", rcu_state.abbr, cpu);
+	if (WARN_ONCE(IS_ERR(t), "%s: Could not start rcuo CB kthread, OOM is now expected behavior\n", __func__))
+		return;
+	WRITE_ONCE(rdp->nocb_cb_kthread, t);
+	WRITE_ONCE(rdp->nocb_gp_kthread, rdp_gp->nocb_gp_kthread);
+
 }
 
 /*
