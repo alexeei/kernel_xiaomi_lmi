@@ -1,3 +1,4 @@
+#include <linux/binfmts.h>
 #include <linux/cgroup.h>
 #include <linux/err.h>
 #include <linux/kernel.h>
@@ -782,48 +783,40 @@ boost_write(struct cgroup_subsys_state *css, struct cftype *cft,
 #ifdef CONFIG_STUNE_ASSIST
 #ifdef CONFIG_SCHED_WALT
 static int sched_boost_override_write_wrapper(struct cgroup_subsys_state *css,
-			struct cftype *cft, u64 override)
+		      			struct cftype *cft, u64 override)
 {
-	if (!strcmp(current->comm, "init"))
+	if (task_is_booster(current))
 		return 0;
 
-	sched_boost_override_write(css, NULL, override);
-
-	return 0;
+	return sched_boost_override_write(css, cft, override);
 }
 
 static int sched_colocate_write_wrapper(struct cgroup_subsys_state *css,
-			struct cftype *cft, u64 colocate)
+					struct cftype *cft, u64 colocate)
 {
-	if (!strcmp(current->comm, "init"))
+	if (task_is_booster(current))
 		return 0;
 
-	sched_colocate_write(css, NULL, colocate);
-
-	return 0;
+	return sched_colocate_write(css, cft, colocate);
 }
 #endif
 
 static int boost_write_wrapper(struct cgroup_subsys_state *css,
-			struct cftype *cft, s64 boost)
+       			struct cftype *cft, s64 boost)
 {
-	if (!strcmp(current->comm, "init"))
+	if (task_is_booster(current))
 		return 0;
 
-	boost_write(css, NULL, boost);
-
-	return 0;
+	return boost_write(css, cft, boost);
 }
 
 static int prefer_idle_write_wrapper(struct cgroup_subsys_state *css,
 			struct cftype *cft, u64 prefer_idle)
 {
-	if (!strcmp(current->comm, "init"))
+	if (task_is_booster(current))
 		return 0;
 
-	prefer_idle_write(css, NULL, prefer_idle);
-
-	return 0;
+	return prefer_idle_write(css, cft, prefer_idle);
 }
 #endif
 
@@ -889,11 +882,13 @@ struct st_data {
 static void write_default_values(struct cgroup_subsys_state *css)
 {
 	static struct st_data st_targets[] = {
+
 		{ "audio-app",	0, 0},
 		{ "background",	-15, 0},
 		{ "foreground",	0, 1},
 		{ "rt",		0, 0},
 		{ "top-app",	1, 1},
+
 	};
 	int i;
 
