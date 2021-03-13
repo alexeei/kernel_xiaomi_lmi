@@ -1614,6 +1614,7 @@ static ssize_t writeback_store(struct device *dev,
 		goto release_init_lock;
 	}
 
+
 #ifdef CONFIG_ZRAM_LRU_WRITEBACK
 	if (mode == IDLE_WRITEBACK) {
 		if (is_bdev_avail(zram))
@@ -1623,6 +1624,7 @@ static ssize_t writeback_store(struct device *dev,
 		goto release_init_lock;
 	}
 #endif
+
 
 	for (; nr_pages != 0; index++, nr_pages--) {
 		struct bio_vec bvec;
