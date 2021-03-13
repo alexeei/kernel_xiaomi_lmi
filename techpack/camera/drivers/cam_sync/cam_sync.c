@@ -1174,6 +1174,8 @@ static int __init cam_sync_init(void)
 	int rc;
 	kmem_payload_pool = KMEM_CACHE(sync_user_payload, SLAB_HWCACHE_ALIGN | SLAB_PANIC);
 
+	kmem_payload_pool = KMEM_CACHE(sync_user_payload, SLAB_HWCACHE_ALIGN | SLAB_PANIC);
+
 	rc = platform_device_register(&cam_sync_device);
 	if (rc)
 		return -ENODEV;
@@ -1191,6 +1193,8 @@ static void __exit cam_sync_exit(void)
 	kmem_cache_destroy(kmem_payload_pool);
 	platform_device_unregister(&cam_sync_device);
 	kfree(sync_dev);
+
+	kmem_cache_destroy(kmem_payload_pool);
 }
 
 module_init(cam_sync_init);
