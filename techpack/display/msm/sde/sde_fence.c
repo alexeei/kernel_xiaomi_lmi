@@ -196,7 +196,7 @@ static int _sde_fence_create_fd(void *fence_ctx, uint32_t val)
 	}
 
 	sde_fence = kmem_cache_zalloc(kmem_fence_pool, GFP_KERNEL);
-	if (!sde_fence)
+	if (unlikely(!sde_fence))
 		return -ENOMEM;
 
 	sde_fence->ctx = fence_ctx;
@@ -207,6 +207,8 @@ static int _sde_fence_create_fd(void *fence_ctx, uint32_t val)
 	/* create fd */
 	fd = get_unused_fd_start_flags(1, 0);
 	if (unlikely(fd < 0)) {
+		SDE_ERROR("failed to get_unused_fd_flags(), %s\n",
+							sde_fence->name);
 		dma_fence_put(&sde_fence->base);
 		goto exit;
 	}
