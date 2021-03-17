@@ -865,10 +865,12 @@ static void z_erofs_decompressqueue_work(struct work_struct *work);
 static void z_erofs_decompress_kickoff(struct z_erofs_decompressqueue *io,
 				       bool sync, int bios)
 {
-	/* auto: enable for readpage, disable for readahead */
-	if ((sbi->sync_decompress == EROFS_SYNC_DECOMPRESS_AUTO) &&
-	    !readahead_pages)
-		return true;
+
+	struct erofs_sb_info *const sbi = EROFS_SB(io->sb);
+
+	/* wake up the caller thread for sync decompression */
+	if (sync) {
+		unsigned long flags;
 
 	if ((sbi->sync_decompress == EROFS_SYNC_DECOMPRESS_FORCE_ON) &&
 	    (readahead_pages <= sbi->max_sync_decompress_pages))
@@ -923,9 +925,10 @@ static void z_erofs_do_decompressed_bvec(struct z_erofs_decompress_backend *be,
 
 	if (atomic_add_return(bios, &io->pending_bios))
 		return;
-	/* Use workqueue decompression for atomic contexts only */
+	/* Use workqueue and sync decompression for atomic contexts only */
 	if (in_atomic() || irqs_disabled()) {
 		queue_work(z_erofs_workqueue, &io->u.work);
+		sbi->readahead_sync_decompress = true;
 		return;
 	}
 	z_erofs_decompressqueue_work(&io->u.work);
@@ -1696,6 +1699,8 @@ static void z_erofs_readahead(struct readahead_control *rac)
 {
 	struct inode *const inode = rac->mapping->host;
 	struct erofs_sb_info *const sbi = EROFS_I_SB(inode);
+	bool sync = (sbi->readahead_sync_decompress &&
+			nr_pages <= sbi->max_sync_decompress_pages);
 	struct z_erofs_decompress_frontend f = DECOMPRESS_FRONTEND_INIT(inode);
 	struct page *pagepool = NULL, *head = NULL, *page;
 	unsigned int nr_pages;
