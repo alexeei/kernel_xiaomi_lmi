@@ -860,8 +860,10 @@ out:
 	return err;
 }
 
-static bool z_erofs_get_sync_decompress_policy(struct erofs_sb_info *sbi,
-				       unsigned int readahead_pages)
+
+static void z_erofs_decompressqueue_work(struct work_struct *work);
+static void z_erofs_decompress_kickoff(struct z_erofs_decompressqueue *io,
+				       bool sync, int bios)
 {
 	/* auto: enable for readpage, disable for readahead */
 	if ((sbi->sync_decompress == EROFS_SYNC_DECOMPRESS_AUTO) &&
@@ -918,10 +920,15 @@ static void z_erofs_do_decompressed_bvec(struct z_erofs_decompress_backend *be,
 			return;
 	}
 
-	/* (cold path) one pcluster is requested multiple times */
-	item = kmalloc(sizeof(*item), GFP_KERNEL | __GFP_NOFAIL);
-	item->bvec = *bvec;
-	list_add(&item->list, &be->decompressed_secondary_bvecs);
+
+	if (atomic_add_return(bios, &io->pending_bios))
+		return;
+	/* Use workqueue decompression for atomic contexts only */
+	if (in_atomic() || irqs_disabled()) {
+		queue_work(z_erofs_workqueue, &io->u.work);
+		return;
+	}
+	z_erofs_decompressqueue_work(&io->u.work);
 }
 
 
