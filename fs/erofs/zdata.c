@@ -243,14 +243,15 @@ enum z_erofs_pclustermode {
 	 * |   (belongs to the next pcl)  |   (belongs to the current pcl)  |
 	 * |_______PCLUSTER_FOLLOWED______|________PCLUSTER_HOOKED__________|
 	 */
-	Z_EROFS_PCLUSTER_HOOKED,
+
+	COLLECT_PRIMARY_HOOKED,
 	/*
-	 * a weak form of Z_EROFS_PCLUSTER_FOLLOWED, the difference is that it
+	 * a weak form of COLLECT_PRIMARY_FOLLOWED, the difference is that it
 	 * could be dispatched into bypass queue later due to uptodated managed
 	 * pages. All related online pages cannot be reused for inplace I/O (or
-	 * bvpage) since it can be directly decoded without I/O submission.
+	 * pagevec) since it can be directly decoded without I/O submission.
 	 */
-	Z_EROFS_PCLUSTER_FOLLOWED_NOINPLACE,
+	COLLECT_PRIMARY_FOLLOWED_NOINPLACE,
 	/*
 	 * The current collection has been linked with the owned chain, and
 	 * could also be linked with the remaining collections, which means
@@ -322,21 +323,14 @@ static void preload_compressed_pages(struct z_erofs_collector *clt,
 
 		if (page) {
 			t = tag_compressed_page_justfound(page);
-		} else if (type == DELAYEDALLOC) {
-			t = tagptr_init(compressed_page_t, PAGE_UNALLOCATED);
-		} else if (type == TRYALLOC) {
-			newpage = erofs_allocpage(pagepool, gfp);
-			if (!newpage)
-				goto dontalloc;
-
-			set_page_private(newpage, Z_EROFS_PREALLOCATED_PAGE);
-			t = tag_compressed_page_justfound(newpage);
-		} else {	/* DONTALLOC */
-dontalloc:
-			if (standalone)
-				clt->compressedpages = pages;
+		} else {
+			/* I/O is needed, no possible to decompress directly */
 			standalone = false;
 			switch (type) {
+			case DELAYEDALLOC:
+				t = tagptr_init(compressed_page_t,
+						PAGE_UNALLOCATED);
+				break;
 			case TRYALLOC:
 				newpage = erofs_allocpage(pagepool, gfp);
 				if (!newpage)
@@ -367,7 +361,7 @@ dontalloc:
 	 * managed cache since it can be moved to the bypass queue instead.
 	 */
 	if (standalone)
-		fe->mode = Z_EROFS_PCLUSTER_FOLLOWED_NOINPLACE;
+		clt->mode = COLLECT_PRIMARY_FOLLOWED_NOINPLACE;
 }
 
 /* called by erofs_shrinker to get rid of all compressed_pages */
