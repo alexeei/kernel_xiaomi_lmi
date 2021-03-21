@@ -2874,7 +2874,9 @@ out:
 						SCHED_CPUFREQ_PL);
 		raw_spin_unlock_irqrestore(&cpu_rq(cpu)->lock, flags);
 	}
-	#endif
+
+#endif
+
 	return success;
 }
 
