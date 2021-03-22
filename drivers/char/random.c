@@ -801,7 +801,9 @@ static void crng_initialize(struct crng_state *crng)
 		}
 		crng->state[i] ^= rv;
 	}
+
 	if (trust_cpu && arch_init && crng == &primary_crng) {
+
 		invalidate_batched_entropy();
 		numa_crng_init();
 		crng_init = 2;
