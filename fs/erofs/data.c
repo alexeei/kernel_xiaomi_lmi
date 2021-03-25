@@ -113,86 +113,14 @@ static int erofs_map_blocks_flatmode(struct inode *inode,
 	return 0;
 }
 
-int erofs_map_blocks(struct inode *inode,
-		     struct erofs_map_blocks *map, int flags)
-{
-	struct super_block *sb = inode->i_sb;
-	struct erofs_inode *vi = EROFS_I(inode);
-	struct erofs_inode_chunk_index *idx;
-	struct erofs_buf buf = __EROFS_BUF_INITIALIZER;
-	u64 chunknr;
-	unsigned int unit;
-	erofs_off_t pos;
-	void *kaddr;
-	int err = 0;
 
-	trace_erofs_map_blocks_enter(inode, map, flags);
-	map->m_deviceid = 0;
-	if (map->m_la >= inode->i_size) {
-		/* leave out-of-bound access unmapped */
-		map->m_flags = 0;
-		map->m_plen = 0;
-		goto out;
-	}
+static inline struct bio *erofs_read_raw_page(struct bio *bio,
+					      struct address_space *mapping,
+					      struct page *page,
+					      erofs_off_t *last_block,
+					      unsigned int nblocks,
+					      bool ra)
 
-	if (vi->datalayout != EROFS_INODE_CHUNK_BASED) {
-		err = erofs_map_blocks_flatmode(inode, map, flags);
-		goto out;
-	}
-
-	if (vi->chunkformat & EROFS_CHUNK_FORMAT_INDEXES)
-		unit = sizeof(*idx);			/* chunk index */
-	else
-		unit = EROFS_BLOCK_MAP_ENTRY_SIZE;	/* block map */
-
-	chunknr = map->m_la >> vi->chunkbits;
-	pos = ALIGN(iloc(EROFS_SB(sb), vi->nid) + vi->inode_isize +
-		    vi->xattr_isize, unit) + unit * chunknr;
-
-	kaddr = erofs_read_metabuf(&buf, sb, erofs_blknr(pos), EROFS_KMAP);
-	if (IS_ERR(kaddr)) {
-		err = PTR_ERR(kaddr);
-		goto out;
-	}
-	map->m_la = chunknr << vi->chunkbits;
-	map->m_plen = min_t(erofs_off_t, 1UL << vi->chunkbits,
-			    roundup(inode->i_size - map->m_la, EROFS_BLKSIZ));
-
-	/* handle block map */
-	if (!(vi->chunkformat & EROFS_CHUNK_FORMAT_INDEXES)) {
-		__le32 *blkaddr = kaddr + erofs_blkoff(pos);
-
-		if (le32_to_cpu(*blkaddr) == EROFS_NULL_ADDR) {
-			map->m_flags = 0;
-		} else {
-			map->m_pa = blknr_to_addr(le32_to_cpu(*blkaddr));
-			map->m_flags = EROFS_MAP_MAPPED;
-		}
-		goto out_unlock;
-	}
-	/* parse chunk indexes */
-	idx = kaddr + erofs_blkoff(pos);
-	switch (le32_to_cpu(idx->blkaddr)) {
-	case EROFS_NULL_ADDR:
-		map->m_flags = 0;
-		break;
-	default:
-		map->m_deviceid = le16_to_cpu(idx->device_id) &
-			EROFS_SB(sb)->device_id_mask;
-		map->m_pa = blknr_to_addr(le32_to_cpu(idx->blkaddr));
-		map->m_flags = EROFS_MAP_MAPPED;
-		break;
-	}
-out_unlock:
-	erofs_put_metabuf(&buf);
-out:
-	if (!err)
-		map->m_llen = map->m_plen;
-	trace_erofs_map_blocks_exit(inode, map, flags, 0);
-	return err;
-}
-
-int erofs_map_dev(struct super_block *sb, struct erofs_map_dev *map)
 {
 	struct erofs_dev_context *devs = EROFS_SB(sb)->devs;
 	struct erofs_device_info *dif;
@@ -201,12 +129,39 @@ int erofs_map_dev(struct super_block *sb, struct erofs_map_dev *map)
 	/* primary device by default */
 	map->m_bdev = sb->s_bdev;
 
-	if (map->m_deviceid) {
-		down_read(&devs->rwsem);
-		dif = idr_find(&devs->tree, map->m_deviceid - 1);
-		if (!dif) {
-			up_read(&devs->rwsem);
-			return -ENODEV;
+
+	if (PageUptodate(page)) {
+		err = 0;
+		goto has_updated;
+	}
+
+	/* note that for readpage case, bio also equals to NULL */
+	if (bio &&
+	    /* not continuous */
+	    *last_block + 1 != current_block) {
+submit_bio_retry:
+		submit_bio(bio);
+		bio = NULL;
+	}
+
+	if (!bio) {
+		struct erofs_map_blocks map = {
+			.m_la = blknr_to_addr(current_block),
+		};
+		erofs_blk_t blknr;
+		unsigned int blkoff;
+
+		err = erofs_map_blocks_flatmode(inode, &map, EROFS_GET_BLOCKS_RAW);
+		if (err)
+			goto err_out;
+
+		/* zero out the holed page */
+		if (!(map.m_flags & EROFS_MAP_MAPPED)) {
+			zero_user_segment(page, 0, PAGE_SIZE);
+			SetPageUptodate(page);
+
+			/* imply err = 0, see erofs_map_blocks */
+			goto has_updated;
 		}
 		map->m_bdev = dif->bdev;
 		up_read(&devs->rwsem);
@@ -369,7 +324,13 @@ static ssize_t erofs_file_read_iter(struct kiocb *iocb, struct iov_iter *to)
 
 		return iomap_dio_rw(iocb, to, &erofs_iomap_ops, NULL);
 	}
-	return generic_file_read_iter(iocb, to);
+
+
+	if (!erofs_map_blocks_flatmode(inode, &map, EROFS_GET_BLOCKS_RAW))
+		return erofs_blknr(map.m_pa);
+
+	return 0;
+
 }
 
 /* for uncompressed (aligned) files and raw access for other files */
