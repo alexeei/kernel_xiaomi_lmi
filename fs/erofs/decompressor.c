@@ -25,8 +25,18 @@ struct z_erofs_lz4_decompress_ctx {
 };
 
 int z_erofs_load_lz4_config(struct super_block *sb,
-			    struct erofs_super_block *dsb,
-			    struct z_erofs_lz4_cfgs *lz4, int size)
+			    struct erofs_super_block *dsb)
+{
+	u16 distance = le16_to_cpu(dsb->lz4_max_distance);
+
+	EROFS_SB(sb)->lz4.max_distance_pages = distance ?
+					DIV_ROUND_UP(distance, PAGE_SIZE) + 1 :
+					LZ4_MAX_DISTANCE_PAGES;
+	return 0;
+}
+
+static int z_erofs_lz4_prepare_destpages(struct z_erofs_decompress_req *rq,
+					 struct list_head *pagepool)
 {
 	struct erofs_sb_info *sbi = EROFS_SB(sb);
 	u16 distance;
@@ -83,7 +93,7 @@ static int z_erofs_lz4_prepare_dstpages(struct z_erofs_lz4_decompress_ctx *ctx,
 			j = 0;
 
 		/* 'valid' bounced can only be tested after a complete round */
-		if (!rq->fillgaps && test_bit(j, bounced)) {
+		if (test_bit(j, bounced)) {
 			DBG_BUGON(i < lz4_max_distance_pages);
 			DBG_BUGON(top >= lz4_max_distance_pages);
 			availables[top++] = rq->out[i - lz4_max_distance_pages];

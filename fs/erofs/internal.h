@@ -49,33 +49,12 @@ typedef u64 erofs_off_t;
 /* data type for filesystem-wide blocks number */
 typedef u32 erofs_blk_t;
 
-struct erofs_device_info {
-	char *path;
-	struct block_device *bdev;
-
-	u32 blocks;
-	u32 mapped_blkaddr;
-};
-
-enum {
-	EROFS_SYNC_DECOMPRESS_AUTO,
-	EROFS_SYNC_DECOMPRESS_FORCE_ON,
-	EROFS_SYNC_DECOMPRESS_FORCE_OFF
-};
-
-struct erofs_dev_context {
-	struct idr tree;
-	struct rw_semaphore rwsem;
-
-	unsigned int extra_devices;
-};
 
 /* all filesystem-wide lz4 configurations */
 struct erofs_sb_lz4_info {
 	/* # of pages needed for EROFS lz4 rolling decompression */
 	u16 max_distance_pages;
-	/* maximum possible blocks for pclusters in the filesystem */
-	u16 max_pclusterblks;
+
 };
 
 struct erofs_sb_info {
@@ -537,10 +516,10 @@ int __init z_erofs_init_zip_subsystem(void);
 void z_erofs_exit_zip_subsystem(void);
 int erofs_try_to_free_all_cached_pages(struct erofs_sb_info *sbi,
 				       struct erofs_workgroup *egrp);
-int erofs_try_to_free_cached_page(struct page *page);
+int erofs_try_to_free_cached_page(struct address_space *mapping,
+				  struct page *page);
 int z_erofs_load_lz4_config(struct super_block *sb,
-			    struct erofs_super_block *dsb,
-			    struct z_erofs_lz4_cfgs *lz4, int len);
+			    struct erofs_super_block *dsb);
 #else
 static inline void erofs_shrinker_register(struct super_block *sb) {}
 static inline void erofs_shrinker_unregister(struct super_block *sb) {}
@@ -549,35 +528,15 @@ static inline void erofs_exit_shrinker(void) {}
 static inline int z_erofs_init_zip_subsystem(void) { return 0; }
 static inline void z_erofs_exit_zip_subsystem(void) {}
 static inline int z_erofs_load_lz4_config(struct super_block *sb,
-				  struct erofs_super_block *dsb,
-				  struct z_erofs_lz4_cfgs *lz4, int len)
+				struct erofs_super_block *dsb)
 {
-	if (lz4 || dsb->u1.lz4_max_distance) {
+	if (dsb->lz4_max_distance) {
 		erofs_err(sb, "lz4 algorithm isn't enabled");
 		return -EINVAL;
 	}
 	return 0;
 }
-#endif	/* !CONFIG_EROFS_FS_ZIP */
-
-#ifdef CONFIG_EROFS_FS_ZIP_LZMA
-int z_erofs_lzma_init(void);
-void z_erofs_lzma_exit(void);
-int z_erofs_load_lzma_config(struct super_block *sb,
-			     struct erofs_super_block *dsb,
-			     struct z_erofs_lzma_cfgs *lzma, int size);
-#else
-static inline int z_erofs_lzma_init(void) { return 0; }
-static inline int z_erofs_lzma_exit(void) { return 0; }
-static inline int z_erofs_load_lzma_config(struct super_block *sb,
-			     struct erofs_super_block *dsb,
-			     struct z_erofs_lzma_cfgs *lzma, int size) {
-	if (lzma) {
-		erofs_err(sb, "lzma algorithm isn't enabled");
-		return -EINVAL;
-	}
-	return 0;
-}
+)
 #endif	/* !CONFIG_EROFS_FS_ZIP */
 
 #define EFSCORRUPTED    EUCLEAN         /* Filesystem is corrupted */
