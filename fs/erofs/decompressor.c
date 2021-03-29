@@ -213,11 +213,9 @@ static int z_erofs_lz4_decompress_mem(struct z_erofs_lz4_decompress_ctx *ctx,
 	u8 *headpage, *src;
 	int ret, maptype;
 
-	DBG_BUGON(*rq->in == NULL);
-	headpage = kmap_atomic(*rq->in);
 
-	/* LZ4 decompression inplace is only safe if zero_padding is enabled */
-	if (erofs_sb_has_zero_padding(EROFS_SB(rq->sb))) {
+	/* decompression inplace is only safe when 0padding is enabled */
+	if (erofs_sb_has_lz4_0padding(EROFS_SB(rq->sb))) {
 		support_0padding = true;
 		ret = z_erofs_fixup_insize(rq, headpage + rq->pageofs_in,
 				min_t(unsigned int, rq->inputsize,
