@@ -129,49 +129,83 @@ static bool check_layout_compatibility(struct super_block *sb,
 
 #ifdef CONFIG_EROFS_FS_ZIP
 /* read variable-sized metadata, offset will be aligned by 4-byte */
-static void *erofs_read_metadata(struct super_block *sb, struct erofs_buf *buf,
+
+static void *erofs_read_metadata(struct super_block *sb, struct page **pagep,
 				 erofs_off_t *offset, int *lengthp)
 {
+	struct page *page = *pagep;
 	u8 *buffer, *ptr;
 	int len, i, cnt;
+	erofs_blk_t blk;
 
 	*offset = round_up(*offset, 4);
-	ptr = erofs_read_metabuf(buf, sb, erofs_blknr(*offset), EROFS_KMAP);
-	if (IS_ERR(ptr))
-		return ptr;
+	blk = erofs_blknr(*offset);
+
+	if (!page || page->index != blk) {
+		if (page) {
+			unlock_page(page);
+			put_page(page);
+		}
+		page = erofs_get_meta_page(sb, blk);
+		if (IS_ERR(page))
+			goto err_nullpage;
+	}
+
+	ptr = kmap(page);
 
 	len = le16_to_cpu(*(__le16 *)&ptr[erofs_blkoff(*offset)]);
 	if (!len)
 		len = U16_MAX + 1;
 	buffer = kmalloc(len, GFP_KERNEL);
-	if (!buffer)
-		return ERR_PTR(-ENOMEM);
+
+	if (!buffer) {
+		buffer = ERR_PTR(-ENOMEM);
+		goto out;
+	}
 	*offset += sizeof(__le16);
 	*lengthp = len;
 
 	for (i = 0; i < len; i += cnt) {
 		cnt = min(EROFS_BLKSIZ - (int)erofs_blkoff(*offset), len - i);
-		ptr = erofs_read_metabuf(buf, sb, erofs_blknr(*offset),
-					 EROFS_KMAP);
-		if (IS_ERR(ptr)) {
-			kfree(buffer);
-			return ptr;
+		blk = erofs_blknr(*offset);
+
+		if (!page || page->index != blk) {
+			if (page) {
+				kunmap(page);
+				unlock_page(page);
+				put_page(page);
+			}
+			page = erofs_get_meta_page(sb, blk);
+			if (IS_ERR(page)) {
+				kfree(buffer);
+				goto err_nullpage;
+			}
+			ptr = kmap(page);
 		}
 		memcpy(buffer + i, ptr + erofs_blkoff(*offset), cnt);
 		*offset += cnt;
 	}
+
+out:
+	kunmap(page);
+	*pagep = page;
 	return buffer;
+err_nullpage:
+	*pagep = NULL;
+	return page;
 }
 
 static int erofs_load_compr_cfgs(struct super_block *sb,
 				 struct erofs_super_block *dsb)
 {
-	struct erofs_sb_info *sbi = EROFS_SB(sb);
-	struct erofs_buf buf = __EROFS_BUF_INITIALIZER;
+
+	struct erofs_sb_info *sbi;
+	struct page *page;
 	unsigned int algs, alg;
 	erofs_off_t offset;
-	int size, ret = 0;
+	int size, ret;
 
+	sbi = EROFS_SB(sb);
 	sbi->available_compr_algs = le16_to_cpu(dsb->u1.available_compr_algs);
 	if (sbi->available_compr_algs & ~Z_EROFS_ALL_COMPR_ALGS) {
 		erofs_err(sb, "try to load compressed fs with unsupported algorithms %x",
@@ -180,25 +214,24 @@ static int erofs_load_compr_cfgs(struct super_block *sb,
 	}
 
 	offset = EROFS_SUPER_OFFSET + sbi->sb_size;
+	page = NULL;
 	alg = 0;
+	ret = 0;
 	for (algs = sbi->available_compr_algs; algs; algs >>= 1, ++alg) {
 		void *data;
 
 		if (!(algs & 1))
 			continue;
 
-		data = erofs_read_metadata(sb, &buf, &offset, &size);
+		data = erofs_read_metadata(sb, &page, &offset, &size);
 		if (IS_ERR(data)) {
 			ret = PTR_ERR(data);
-			break;
+			goto err;
 		}
 
 		switch (alg) {
 		case Z_EROFS_COMPRESSION_LZ4:
 			ret = z_erofs_load_lz4_config(sb, dsb, data, size);
-			break;
-		case Z_EROFS_COMPRESSION_LZMA:
-			ret = z_erofs_load_lzma_config(sb, dsb, data, size);
 			break;
 		default:
 			DBG_BUGON(1);
@@ -206,9 +239,14 @@ static int erofs_load_compr_cfgs(struct super_block *sb,
 		}
 		kfree(data);
 		if (ret)
-			break;
+
+			goto err;
 	}
-	erofs_put_metabuf(&buf);
+err:
+	if (page) {
+		unlock_page(page);
+		put_page(page);
+	}
 	return ret;
 }
 #else
@@ -223,63 +261,6 @@ static int erofs_load_compr_cfgs(struct super_block *sb,
 }
 #endif
 
-static int erofs_init_devices(struct super_block *sb,
-			      struct erofs_super_block *dsb)
-{
-	struct erofs_sb_info *sbi = EROFS_SB(sb);
-	unsigned int ondisk_extradevs;
-	erofs_off_t pos;
-	struct erofs_buf buf = __EROFS_BUF_INITIALIZER;
-	struct erofs_device_info *dif;
-	struct erofs_deviceslot *dis;
-	void *ptr;
-	int id, err = 0;
-
-	sbi->total_blocks = sbi->primarydevice_blocks;
-	if (!erofs_sb_has_device_table(sbi))
-		ondisk_extradevs = 0;
-	else
-		ondisk_extradevs = le16_to_cpu(dsb->extra_devices);
-
-	if (ondisk_extradevs != sbi->devs->extra_devices) {
-		erofs_err(sb, "extra devices don't match (ondisk %u, given %u)",
-			  ondisk_extradevs, sbi->devs->extra_devices);
-		return -EINVAL;
-	}
-	if (!ondisk_extradevs)
-		return 0;
-
-	sbi->device_id_mask = roundup_pow_of_two(ondisk_extradevs + 1) - 1;
-	pos = le16_to_cpu(dsb->devt_slotoff) * EROFS_DEVT_SLOT_SIZE;
-	down_read(&sbi->devs->rwsem);
-	idr_for_each_entry(&sbi->devs->tree, dif, id) {
-		struct block_device *bdev;
-
-		ptr = erofs_read_metabuf(&buf, sb, erofs_blknr(pos),
-					 EROFS_KMAP);
-		if (IS_ERR(ptr)) {
-			err = PTR_ERR(ptr);
-			break;
-		}
-		dis = ptr + erofs_blkoff(pos);
-
-		bdev = blkdev_get_by_path(dif->path,
-					  FMODE_READ | FMODE_EXCL,
-					  sb->s_type);
-		if (IS_ERR(bdev)) {
-			err = PTR_ERR(bdev);
-			break;
-		}
-		dif->bdev = bdev;
-		dif->blocks = le32_to_cpu(dis->blocks);
-		dif->mapped_blkaddr = le32_to_cpu(dis->mapped_blkaddr);
-		sbi->total_blocks += dif->blocks;
-		pos += EROFS_DEVT_SLOT_SIZE;
-	}
-	up_read(&sbi->devs->rwsem);
-	erofs_put_metabuf(&buf);
-	return err;
-}
 
 static int erofs_read_superblock(struct super_block *sb)
 {
@@ -330,7 +311,8 @@ static int erofs_read_superblock(struct super_block *sb)
 			  sbi->sb_size);
 		goto out;
 	}
-	sbi->primarydevice_blocks = le32_to_cpu(dsb->blocks);
+
+	sbi->blocks = le32_to_cpu(dsb->blocks);
 	sbi->meta_blkaddr = le32_to_cpu(dsb->meta_blkaddr);
 #ifdef CONFIG_EROFS_FS_XATTR
 	sbi->xattr_blkaddr = le32_to_cpu(dsb->xattr_blkaddr);
@@ -353,7 +335,10 @@ static int erofs_read_superblock(struct super_block *sb)
 	}
 
 	/* parse on-disk compression configurations */
-	ret = z_erofs_load_lz4_config(sb, dsb, NULL, 0);
+	if (erofs_sb_has_compr_cfgs(sbi))
+		ret = erofs_load_compr_cfgs(sb, dsb);
+	else
+		ret = z_erofs_load_lz4_config(sb, dsb, NULL, 0);
 out:
 	erofs_put_metabuf(&buf);
 	return ret;

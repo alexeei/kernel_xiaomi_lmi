@@ -20,40 +20,13 @@
  * Any bits that aren't in EROFS_ALL_FEATURE_INCOMPAT should
  * be incompatible with this kernel version.
  */
-#define EROFS_FEATURE_INCOMPAT_ZERO_PADDING	0x00000001
+
+#define EROFS_FEATURE_INCOMPAT_LZ4_0PADDING	0x00000001
 #define EROFS_FEATURE_INCOMPAT_COMPR_CFGS	0x00000002
-#define EROFS_FEATURE_INCOMPAT_BIG_PCLUSTER	0x00000002
-
-#define EROFS_FEATURE_INCOMPAT_CHUNKED_FILE	0x00000004
-
-#define EROFS_FEATURE_INCOMPAT_DEVICE_TABLE	0x00000008
-
-#define EROFS_FEATURE_INCOMPAT_COMPR_HEAD2	0x00000008
-
-#define EROFS_FEATURE_INCOMPAT_ZTAILPACKING	0x00000010
-
-#define EROFS_ALL_FEATURE_INCOMPAT		\
-	(EROFS_FEATURE_INCOMPAT_ZERO_PADDING | \
-	 EROFS_FEATURE_INCOMPAT_COMPR_CFGS | \
-	 EROFS_FEATURE_INCOMPAT_BIG_PCLUSTER | \
-	 EROFS_FEATURE_INCOMPAT_CHUNKED_FILE | \
-	 EROFS_FEATURE_INCOMPAT_DEVICE_TABLE | \
-	 EROFS_FEATURE_INCOMPAT_COMPR_HEAD2 | \
-	 EROFS_FEATURE_INCOMPAT_ZTAILPACKING)
-
+#define EROFS_ALL_FEATURE_INCOMPAT		EROFS_FEATURE_INCOMPAT_LZ4_0PADDING
 
 #define EROFS_SB_EXTSLOT_SIZE	16
 
-struct erofs_deviceslot {
-	union {
-		u8 uuid[16];		/* used for device manager later */
-		u8 userdata[64];	/* digest(sha256), etc. */
-	} u;
-	__le32 blocks;			/* total fs blocks of this device */
-	__le32 mapped_blkaddr;		/* map starting at mapped_blkaddr */
-	u8 reserved[56];
-};
-#define EROFS_DEVT_SLOT_SIZE	sizeof(struct erofs_deviceslot)
 
 /* erofs on-disk super block (currently 128 bytes) */
 struct erofs_super_block {
@@ -74,8 +47,12 @@ struct erofs_super_block {
 	__u8 uuid[16];          /* 128-bit uuid for volume */
 	__u8 volume_name[16];   /* volume name */
 	__le32 feature_incompat;
-	/* customized lz4 sliding window size instead of 64k by default */
-	__le16 lz4_max_distance;
+	union {
+		/* bitmap for available compression algorithms */
+		__le16 available_compr_algs;
+		/* customized sliding window size instead of 64k by default */
+		__le16 lz4_max_distance;
+	} __packed u1;
 	__u8 reserved2[42];
 };
 
@@ -275,23 +252,9 @@ enum {
 	Z_EROFS_COMPRESSION_LZMA	= 1,
 	Z_EROFS_COMPRESSION_MAX
 };
-#define Z_EROFS_ALL_COMPR_ALGS		((1 << Z_EROFS_COMPRESSION_MAX) - 1)
 
-/* 14 bytes (+ length field = 16 bytes) */
-struct z_erofs_lz4_cfgs {
-	__le16 max_distance;
-	__le16 max_pclusterblks;
-	u8 reserved[10];
-} __packed;
+#define Z_EROFS_ALL_COMPR_ALGS		(1 << (Z_EROFS_COMPRESSION_MAX - 1))
 
-/* 14 bytes (+ length field = 16 bytes) */
-struct z_erofs_lzma_cfgs {
-	__le32 dict_size;
-	__le16 format;
-	u8 reserved[8];
-} __packed;
-
-#define Z_EROFS_LZMA_MAX_DICT_SIZE	(8 * Z_EROFS_PCLUSTER_MAX_SIZE)
 
 /* 14 bytes (+ length field = 16 bytes) */
 struct z_erofs_lz4_cfgs {

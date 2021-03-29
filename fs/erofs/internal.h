@@ -255,6 +255,7 @@ static inline bool erofs_sb_has_##name(struct erofs_sb_info *sbi) \
 
 
 EROFS_FEATURE_FUNCS(lz4_0padding, incompat, INCOMPAT_LZ4_0PADDING)
+EROFS_FEATURE_FUNCS(compr_cfgs, incompat, INCOMPAT_COMPR_CFGS)
 EROFS_FEATURE_FUNCS(sb_chksum, compat, COMPAT_SB_CHKSUM)
 
 /* atomic flag definitions */
@@ -532,7 +533,7 @@ static inline int z_erofs_load_lz4_config(struct super_block *sb,
 				  struct erofs_super_block *dsb,
 				  struct z_erofs_lz4_cfgs *lz4, int len)
 {
-	if (lz4 || dsb->lz4_max_distance) {
+	if (lz4 || dsb->u1.lz4_max_distance) {
 		erofs_err(sb, "lz4 algorithm isn't enabled");
 		return -EINVAL;
 	}
