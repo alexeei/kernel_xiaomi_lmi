@@ -1152,14 +1152,10 @@ static int z_erofs_decompress_pcluster(struct z_erofs_decompress_backend *be,
 				 }, be->pagepool);
 
 out:
-	/* must handle all compressed pages before actual file pages */
-	if (z_erofs_is_inline_pcluster(pcl)) {
-		page = pcl->compressed_bvecs[0].page;
-		WRITE_ONCE(pcl->compressed_bvecs[0].page, NULL);
-		put_page(page);
-	} else {
-		for (i = 0; i < pclusterpages; ++i) {
-			page = pcl->compressed_bvecs[i].page;
+
+	/* must handle all compressed pages before ending pages */
+	for (i = 0; i < clusterpages; ++i) {
+		page = compressed_pages[i];
 
 			if (erofs_page_is_managed(sbi, page))
 				continue;
