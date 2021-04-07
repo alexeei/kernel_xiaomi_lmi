@@ -1375,6 +1375,7 @@ static const char *adreno_get_gpu_model(struct kgsl_device *device)
 	return gpu_model;
 }
 
+
 static u32 adreno_get_vk_device_id(struct kgsl_device *device)
 {
 	struct device_node *node;
@@ -1394,6 +1395,7 @@ static u32 adreno_get_vk_device_id(struct kgsl_device *device)
 
 	return device_id;
 }
+
 
 static int adreno_probe_efuse(struct platform_device *pdev,
 					struct adreno_device *adreno_dev)
