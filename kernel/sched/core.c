@@ -30,23 +30,8 @@
 
 DEFINE_PER_CPU_SHARED_ALIGNED(struct rq, runqueues);
 
-#ifdef CONFIG_SCHED_DEBUG
 /*
- * Debugging: various feature bits
- *
- * If SCHED_DEBUG is disabled, each compilation unit has its own copy of
- * sysctl_sched_features, defined in sched.h, to allow constants propagation
- * at compile time and compiler optimization based on features default.
- */
-#define SCHED_FEAT(name, enabled)	\
-	(1UL << __SCHED_FEAT_##name) * enabled |
-const_debug unsigned int sysctl_sched_features =
-#include "features.h"
-	0;
-#undef SCHED_FEAT
-#endif
 
-/*
  * Number of tasks to iterate in a single balance run.
  * Limited because this is done with IRQs disabled.
  */
@@ -2436,6 +2421,7 @@ static int ttwu_remote(struct task_struct *p, int wake_flags)
 }
 
 #ifdef CONFIG_SMP
+#if SCHED_FEAT_TTWU_QUEUE
 void sched_ttwu_pending(void)
 {
 	struct rq *rq = this_rq();
@@ -2454,6 +2440,7 @@ void sched_ttwu_pending(void)
 
 	rq_unlock_irqrestore(rq, &rf);
 }
+#endif
 
 void scheduler_ipi(void)
 {
@@ -2465,8 +2452,13 @@ void scheduler_ipi(void)
 	 */
 	preempt_fold_need_resched();
 
+#if SCHED_FEAT_TTWU_QUEUE
 	if (llist_empty(&this_rq()->wake_list) && !got_nohz_idle_kick())
 		return;
+#else
+	if (!got_nohz_idle_kick())
+		return;
+#endif
 
 	/*
 	 * Not all reschedule IPI handlers call irq_enter/irq_exit, since
@@ -2494,7 +2486,16 @@ void scheduler_ipi(void)
 	irq_exit();
 }
 
-static void ttwu_queue_remote(struct task_struct *p, int cpu, int wake_flags)
+
+#if SCHED_FEAT_TTWU_QUEUE
+/*
+ * Queue a task on the target CPUs wake_list and wake the CPU via IPI if
+ * necessary. The wakee CPU on receipt of the IPI will queue the task
+ * via sched_ttwu_wakeup() for activation so the wakee incurs the cost
+ * of the wakeup instead of the waker.
+ */
+static void __ttwu_queue_wakelist(struct task_struct *p, int cpu, int wake_flags)
+
 {
 	struct rq *rq = cpu_rq(cpu);
 
@@ -2507,6 +2508,7 @@ static void ttwu_queue_remote(struct task_struct *p, int cpu, int wake_flags)
 			trace_sched_wake_idle_without_ipi(cpu);
 	}
 }
+#endif
 
 void wake_up_if_idle(int cpu)
 {
@@ -2539,6 +2541,45 @@ bool cpus_share_cache(int this_cpu, int that_cpu)
 
 	return per_cpu(sd_llc_id, this_cpu) == per_cpu(sd_llc_id, that_cpu);
 }
+
+
+#if SCHED_FEAT_TTWU_QUEUE
+static inline bool ttwu_queue_cond(int cpu, int wake_flags)
+{
+	/*
+	 * If the CPU does not share cache, then queue the task on the
+	 * remote rqs wakelist to avoid accessing remote data.
+	 */
+	if (!cpus_share_cache(smp_processor_id(), cpu))
+		return true;
+
+	/*
+	 * If the task is descheduling and the only running task on the
+	 * CPU then use the wakelist to offload the task activation to
+	 * the soon-to-be-idle CPU as the current CPU is likely busy.
+	 * nr_running is checked to avoid unnecessary task stacking.
+	 */
+	if ((wake_flags & WF_ON_RQ) && cpu_rq(cpu)->nr_running <= 1)
+		return true;
+
+	return false;
+}
+
+static bool ttwu_queue_wakelist(struct task_struct *p, int cpu, int wake_flags)
+{
+	if (sched_feat(TTWU_QUEUE) && ttwu_queue_cond(cpu, wake_flags)) {
+		if (WARN_ON_ONCE(cpu == smp_processor_id()))
+			return false;
+
+		sched_clock_cpu(cpu); /* Sync clocks across CPUs */
+		__ttwu_queue_wakelist(p, cpu, wake_flags);
+		return true;
+	}
+
+	return false;
+}
+#endif
+
 #endif /* CONFIG_SMP */
 
 static void ttwu_queue(struct task_struct *p, int cpu, int wake_flags)
@@ -2547,12 +2588,13 @@ static void ttwu_queue(struct task_struct *p, int cpu, int wake_flags)
 	struct rq_flags rf;
 
 #if defined(CONFIG_SMP)
-	if ((sched_feat(TTWU_QUEUE) && !cpus_share_cache(smp_processor_id(), cpu)) ||
-			walt_want_remote_wakeup()) {
-		sched_clock_cpu(cpu); /* Sync clocks across CPUs */
-		ttwu_queue_remote(p, cpu, wake_flags);
+
+#if SCHED_FEAT_TTWU_QUEUE
+	if (ttwu_queue_wakelist(p, cpu, wake_flags))
+
 		return;
 	}
+#endif
 #endif
 
 	rq_lock(rq, &rf);
@@ -4937,8 +4979,10 @@ int idle_cpu(int cpu)
 		return 0;
 
 #ifdef CONFIG_SMP
+#if SCHED_FEAT_TTWU_QUEUE
 	if (!llist_empty(&rq->wake_list))
 		return 0;
+#endif
 #endif
 
 	return 1;
