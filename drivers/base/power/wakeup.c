@@ -872,10 +872,10 @@ void pm_print_active_wakeup_sources(void)
 
 	srcuidx = srcu_read_lock(&wakeup_srcu);
 	list_for_each_entry_rcu(ws, &wakeup_sources, entry) {
-		if (ws->active) {
-			
+		if (ws->active) {	
 if (!is_blocked(ws))
-				active = 1;
+			pr_debug("active wakeup source: %s\n", ws->name);
+			active = 1;
 		} else if (!active &&
 			   (!last_activity_ws ||
 			    ktime_to_ns(ws->last_time) >
