@@ -59,6 +59,22 @@ void f2fs_update_sit_info(struct f2fs_sb_info *sbi)
 		si->avg_vblocks = 0;
 }
 
+
+const char *f2fs_cp_reasons[NR_CP_REASON_TYPE] = {
+	"no needed",
+	"non regular",
+	"compressed",
+	"hardlink",
+	"sb needs cp",
+	"wrong pino",
+	"no space roll forward",
+	"node needs cp",
+	"fastboot mode",
+	"log type is 2",
+	"dir needs recovery",
+};
+
+
 #ifdef CONFIG_DEBUG_FS
 static void update_general_status(struct f2fs_sb_info *sbi)
 {
@@ -471,7 +487,6 @@ static int stat_show(struct seq_file *s, void *v)
 
 DEFINE_SHOW_ATTRIBUTE(stat);
 #endif
-
 int f2fs_build_stats(struct f2fs_sb_info *sbi)
 {
 	struct f2fs_super_block *raw_super = F2FS_RAW_SUPER(sbi);
