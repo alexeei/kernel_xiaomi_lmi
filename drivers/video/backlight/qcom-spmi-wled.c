@@ -432,22 +432,25 @@ static int wled5_set_brightness(struct wled *wled, u16 brightness)
 	if (!prop_read) {
 		of_property_read_u32(wled->pdev->dev.of_node, "mi,cabcoff-dbv", &cabc_off_dbv);
 		of_property_read_u32_array(wled->pdev->dev.of_node, "mi,cabc-pwm", cabc_pwm, 2);
-		pr_info("wled config dbv:%d, pwm:%d:%d", cabc_off_dbv, cabc_pwm[0], cabc_pwm[1]);
+
+		pr_info("wled config dbv:%d, pwm:%d:%d",
+			cabc_off_dbv, cabc_pwm[0], cabc_pwm[1]);
 
 		if (cabc_off_dbv > wled->max_brightness
-		|| cabc_pwm[0] == 0 || cabc_pwm[0] > cabc_pwm[1])
+				|| cabc_pwm[0] == 0
+				|| cabc_pwm[0] > cabc_pwm[1])
 			cabc_off_dbv = 0;
+
 		prop_read = 1;
 	}
 
 	if (cabc_off_dbv > 0 && brightness < cabc_off_dbv) {
-		brightness = brightness*cabc_pwm[0]/cabc_pwm[1];
+		brightness = brightness * cabc_pwm[0] / cabc_pwm[1];
 
 		if (!cabc_disable) {
 			pr_info("wled config to disable cabc\n");
 			wled->cabc_config(wled, false);
 		}
-
 		cabc_disable = 1;
 	} else if (cabc_disable) {
 		wled->cabc_config(wled, true);
