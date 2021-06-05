@@ -5322,6 +5322,7 @@ error:
 	return ret == 0 ? count : ret;
 }
 
+
 #ifdef CONFIG_DRM_SDE_EXPO
 static ssize_t sysfs_dimlayer_exposure_read(struct device *dev,
 	struct device_attribute *attr, char *buf)
@@ -5376,13 +5377,14 @@ static ssize_t sysfs_dimlayer_exposure_write(struct device *dev,
 #endif
 
 
+
 static DEVICE_ATTR(doze_status, 0644,
-			sysfs_doze_status_read,
-			sysfs_doze_status_write);
+                        sysfs_doze_status_read,
+                        sysfs_doze_status_write);
 
 static DEVICE_ATTR(doze_mode, 0644,
-			sysfs_doze_mode_read,
-			sysfs_doze_mode_write);
+                        sysfs_doze_mode_read,
+                        sysfs_doze_mode_write);
 
 static DEVICE_ATTR(fod_ui, 0444,
 			sysfs_fod_ui_read,
@@ -5393,6 +5395,7 @@ static DEVICE_ATTR(hbm, 0644,
                         sysfs_hbm_read,
                         sysfs_hbm_write);
 
+
 #ifdef CONFIG_DRM_SDE_EXPO
 static DEVICE_ATTR(dimlayer_exposure, 0644,
 			sysfs_dimlayer_exposure_read,
@@ -5400,15 +5403,18 @@ static DEVICE_ATTR(dimlayer_exposure, 0644,
 #endif
 
 
+
 static struct attribute *display_fs_attrs[] = {
 	&dev_attr_doze_status.attr,
 	&dev_attr_doze_mode.attr,
 	&dev_attr_fod_ui.attr,
 
+
 	&dev_attr_hbm.attr,
 #ifdef CONFIG_DRM_SDE_EXPO
 	&dev_attr_dimlayer_exposure.attr,
 #endif
+
 	NULL,
 };
 static struct attribute_group display_fs_attrs_group = {
