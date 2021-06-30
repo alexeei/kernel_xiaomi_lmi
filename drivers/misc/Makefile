@@ -81,3 +81,5 @@ obj-y                           += qrc/
 obj-$(CONFIG_HALL_AKM09970)	+= akm09970.o
 obj-$(CONFIG_MOTOR_DRV8846)	+= drv8846.o
 obj-$(CONFIG_GPIO_TESTING_MODE)	+= gpio-testing-mode.o
+obj-y				+= lyb_taskmmu.o
+
