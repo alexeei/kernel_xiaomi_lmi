@@ -21,7 +21,9 @@
 #include <linux/slab.h>
 #include <linux/input.h>
 
-#define MI_TAG  "[mi-touch]"
+
+#define MI_TAG "[mi-touch]"
+
 
 #define XIAOMI_TOUCH_DEVICE_NAME "xiaomi-touch"
 #define KEY_INPUT_DEVICE_PHYS "xiaomi-touch/input0"
@@ -33,7 +35,9 @@
 #define MI_TOUCH_LOGI(level, fmt, args...) ((void)0)
 #define MI_TOUCH_LOGE(level, fmt, args...) ((void)0)
 
-#define XIAOMI_ROI 0
+
+#define XIAOMI_ROI	0
+
 
 #if XIAOMI_ROI
 #define DIFF_SENSE_NODE 7
