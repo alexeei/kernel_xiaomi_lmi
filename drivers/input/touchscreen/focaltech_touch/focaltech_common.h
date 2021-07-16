@@ -162,22 +162,22 @@ static unsigned int XIAOMI_TP_DEBUG_EN = 0;
 #define XIAOMI_TP_DEBUG(a, arg...) ((void)0)
 
 #if FTS_DEBUG_EN
-#define FTS_DEBUG_LEVEL     1
-#if (FTS_DEBUG_LEVEL == 2)
-#define FTS_DEBUG(fmt, args...) printk("[FTS][%s]"fmt"\n", __func__, ##args)
-#else
-/* #define FTS_DEBUG(fmt, args...) printk("[FTS]"fmt"\n", ##args) */
-#define FTS_DEBUG(fmt, args...) printk(KERN_ERR "[FTS][Error]"fmt"\n", ##args)
-#endif
-#define FTS_FUNC_ENTER() printk("[FTS]%s: Enter\n", __func__)
-#define FTS_FUNC_EXIT()  printk("[FTS]%s: Exit(%d)\n", __func__, __LINE__)
-#else /* #if FTS_DEBUG_EN */
+#define FTS_DEBUG(fmt, args...) do { \
+	printk("[FTS_TS]%s:"fmt"\n", __func__, ##args); \
+} while (0)
+
+#define FTS_FUNC_ENTER() do { \
+	printk("[FTS_TS]%s: Enter\n", __func__); \
+} while (0)
+
+#define FTS_FUNC_EXIT() do { \
+	printk("[FTS_TS]%s: Exit(%d)\n", __func__, __LINE__); \
+} while (0)
+#else /* #if FTS_DEBUG_EN*/
 #define FTS_DEBUG(fmt, args...) ((void)0)
 #define FTS_INFO(fmt, args...) ((void)0)
 #define FTS_ERROR(fmt, args...) ((void)0)
 #define FTS_FUNC_ENTER()
 #define FTS_FUNC_EXIT()
 #endif
-
-
 #endif /* __LINUX_FOCALTECH_COMMON_H__ */
