@@ -202,7 +202,8 @@
  * Production test enable
  * 1: enable, 0:disable(default)
  */
-#define FTS_TEST_EN                             0
+
+#define FTS_TEST_EN 0
 
 /*
  * Pinctrl enable
