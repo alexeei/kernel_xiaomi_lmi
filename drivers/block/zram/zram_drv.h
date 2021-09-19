@@ -18,7 +18,6 @@
 #include <linux/rwsem.h>
 #include <linux/zsmalloc.h>
 #include <linux/crypto.h>
-#include <linux/mm.h>
 
 #include "zcomp.h"
 
@@ -86,6 +85,7 @@ struct zram_stats {
 	atomic64_t notify_free;	/* no. of swap slot free notifications */
 	atomic64_t same_pages;		/* no. of same element filled pages */
 	atomic64_t huge_pages;		/* no. of huge pages */
+	atomic64_t huge_pages_since;	/* no. of huge pages since zram set up */
 	atomic64_t pages_stored;	/* no. of pages currently stored */
 	atomic_long_t max_used_pages;	/* no. of maximum pages stored */
 	atomic64_t writestall;		/* no. of write slow paths */
@@ -95,37 +95,6 @@ struct zram_stats {
 	atomic64_t bd_reads;		/* no. of reads from backing device */
 	atomic64_t bd_writes;		/* no. of writes from backing device */
 #endif
-#ifdef CONFIG_ZRAM_LRU_WRITEBACK
-	atomic64_t bd_expire;
-	atomic64_t bd_objcnt;
-	atomic64_t bd_size;
-	atomic64_t bd_max_count;
-	atomic64_t bd_max_size;
-	atomic64_t bd_ppr_count;
-	atomic64_t bd_ppr_reads;
-	atomic64_t bd_ppr_writes;
-	atomic64_t bd_ppr_objcnt;
-	atomic64_t bd_ppr_size;
-	atomic64_t bd_ppr_max_count;
-	atomic64_t bd_ppr_max_size;
-	atomic64_t bd_objreads;
-	atomic64_t bd_objwrites;
-#endif
-	atomic64_t dup_data_size;	/*
-					 * compressed size of pages
-					 * duplicated
-					 */
-	atomic64_t meta_data_size;	/* size of zram_entries */
-};
-
-#ifdef CONFIG_ZRAM_LRU_WRITEBACK
-#define ZRAM_WB_THRESHOLD 32
-#define NR_ZWBS 16
-#define NR_FALLOC_PAGES 512
-#define FALLOC_ALIGN_MASK (~(NR_FALLOC_PAGES - 1))
-struct zram_wb_header {
-	u32 index;
-	u32 size;
 };
 
 struct zram_wb_work {
@@ -180,14 +149,13 @@ struct zram {
 	/*
 	 * zram is claimed so open request will be failed
 	 */
-	bool claim; /* Protected by bdev->bd_mutex */
+	bool claim; /* Protected by disk->open_mutex */
 #ifdef CONFIG_ZRAM_WRITEBACK
 	struct file *backing_dev;
 	spinlock_t wb_limit_lock;
 	bool wb_limit_enable;
 	u64 bd_wb_limit;
 	struct block_device *bdev;
-	unsigned int old_block_size;
 	unsigned long *bitmap;
 	unsigned long nr_pages;
 #endif
