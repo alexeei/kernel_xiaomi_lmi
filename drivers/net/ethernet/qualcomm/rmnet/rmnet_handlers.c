@@ -96,12 +96,16 @@ EXPORT_SYMBOL(rmnet_slow_start_on);
 /* Shs hook handler */
 
 void (*rmnet_shs_skb_entry)(struct sk_buff *skb,
-			    struct rmnet_port *port) __rcu __read_mostly;
+
+			   struct rmnet_port *port) __rcu __read_mostly;
+
 EXPORT_SYMBOL(rmnet_shs_skb_entry);
 
 /* Shs hook handler for work queue*/
 void (*rmnet_shs_skb_entry_wq)(struct sk_buff *skb,
-			       struct rmnet_port *port) __rcu __read_mostly;
+
+			      struct rmnet_port *port) __rcu __read_mostly;
+
 EXPORT_SYMBOL(rmnet_shs_skb_entry_wq);
 
 /* Generic handler */
@@ -295,7 +299,9 @@ free_skb:
 }
 
 void (*rmnet_perf_deag_entry)(struct sk_buff *skb,
-			      struct rmnet_port *port) __rcu __read_mostly;
+
+			     struct rmnet_port *port) __rcu __read_mostly;
+
 EXPORT_SYMBOL(rmnet_perf_deag_entry);
 
 static void
@@ -304,7 +310,9 @@ rmnet_map_ingress_handler(struct sk_buff *skb,
 {
 	struct sk_buff *skbn;
 	void (*rmnet_perf_core_deaggregate)(struct sk_buff *skb,
-					    struct rmnet_port *port);
+
+					   struct rmnet_port *port);
+
 
 	if (skb->dev->type == ARPHRD_ETHER) {
 		if (pskb_expand_head(skb, ETH_HLEN, 0, GFP_ATOMIC)) {
