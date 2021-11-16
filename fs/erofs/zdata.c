@@ -435,18 +435,17 @@ static int z_erofs_attach_page(struct z_erofs_decompress_frontend *fe,
 {
 	int ret;
 
-	if (exclusive) {
-		/* give priority for inplaceio to use file pages first */
-		if (z_erofs_try_inplace_io(fe, bvec))
-			return 0;
-		/* otherwise, check if it can be used as a bvpage */
-		if (fe->mode >= Z_EROFS_PCLUSTER_FOLLOWED &&
-		    !fe->candidate_bvpage)
-			fe->candidate_bvpage = bvec->page;
-	}
-	ret = z_erofs_bvec_enqueue(&fe->biter, bvec, &fe->candidate_bvpage);
-	fe->pcl->vcnt += (ret >= 0);
-	return ret;
+	/* give priority for inplaceio */
+	if (clt->mode >= COLLECT_PRIMARY &&
+	    type == Z_EROFS_PAGE_TYPE_EXCLUSIVE &&
+	    z_erofs_try_inplace_io(clt, page))
+		return 0;
+
+	ret = z_erofs_pagevec_enqueue(&clt->vector, page, type);
+	clt->cl->vcnt += (unsigned int)ret;
+
+	return ret ? 0 : -EAGAIN;
+
 }
 
 static void z_erofs_try_to_claim_pcluster(struct z_erofs_decompress_frontend *f)
