@@ -429,9 +429,11 @@ static bool z_erofs_try_inplace_io(struct z_erofs_decompress_frontend *fe,
 	return false;
 }
 
-/* callers must be with pcluster lock held */
-static int z_erofs_attach_page(struct z_erofs_decompress_frontend *fe,
-			       struct z_erofs_bvec *bvec, bool exclusive)
+
+/* callers must be with collection lock held */
+static int z_erofs_attach_page(struct z_erofs_collector *clt,
+			       struct page *page, enum z_erofs_page_type type,
+			       bool pvec_safereuse)
 {
 	int ret;
 
@@ -441,9 +443,9 @@ static int z_erofs_attach_page(struct z_erofs_decompress_frontend *fe,
 	    z_erofs_try_inplace_io(clt, page))
 		return 0;
 
-	ret = z_erofs_pagevec_enqueue(&clt->vector, page, type);
+	ret = z_erofs_pagevec_enqueue(&clt->vector, page, type,
+				      pvec_safereuse);
 	clt->cl->vcnt += (unsigned int)ret;
-
 	return ret ? 0 : -EAGAIN;
 
 }
@@ -741,17 +743,19 @@ hitted:
 		tight &= (fe->mode >= Z_EROFS_PCLUSTER_FOLLOWED);
 
 retry:
-	err = z_erofs_attach_page(fe, &((struct z_erofs_bvec) {
-					.page = page,
-					.offset = offset - map->m_la,
-					.end = end,
-				  }), exclusive);
-	/* should allocate an additional short-lived page for bvset */
-	if (err == -EAGAIN && !fe->candidate_bvpage) {
-		fe->candidate_bvpage = alloc_page(GFP_NOFS | __GFP_NOFAIL);
-		set_page_private(fe->candidate_bvpage,
-				 Z_EROFS_SHORTLIVED_PAGE);
-		goto retry;
+
+	err = z_erofs_attach_page(clt, page, page_type,
+				  clt->mode >= COLLECT_PRIMARY_FOLLOWED);
+	/* should allocate an additional staging page for pagevec */
+	if (err == -EAGAIN) {
+		struct page *const newpage =
+				alloc_page(GFP_NOFS | __GFP_NOFAIL);
+
+		newpage->mapping = Z_EROFS_MAPPING_STAGING;
+		err = z_erofs_attach_page(clt, newpage,
+					  Z_EROFS_PAGE_TYPE_EXCLUSIVE, true);
+		if (!err)
+			goto retry;
 	}
 
 	if (err) {
