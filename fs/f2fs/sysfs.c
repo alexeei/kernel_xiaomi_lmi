@@ -355,6 +355,16 @@ out:
 			sbi->gc_mode = GC_IDLE_GREEDY;
 		else
 			sbi->gc_mode = GC_NORMAL;
+		}
+		return count;
+	}
+
+	if (!strcmp(a->attr.name, "gc_urgent_high_remaining")) {
+		spin_lock(&sbi->gc_urgent_high_lock);
+		sbi->gc_urgent_high_limited = t != 0;
+		sbi->gc_urgent_high_remaining = t;
+		spin_unlock(&sbi->gc_urgent_high_lock);
+
 		return count;
 	}
 
