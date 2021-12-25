@@ -853,17 +853,17 @@ int dsi_panel_update_doze(struct dsi_panel *panel) {
 	if (panel->doze_enabled && panel->doze_mode == DSI_DOZE_HBM) {
 		rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_MI_DOZE_HBM);
 		if (rc)
-			pr_err("[%s] failed to send DSI_CMD_SET_MI_DOZE_HBM cmd, rc=%d\n",
+			DSI_ERR("[%s] failed to send DSI_CMD_SET_MI_DOZE_HBM cmd, rc=%d\n",
 					panel->name, rc);
 	} else if (panel->doze_enabled && panel->doze_mode == DSI_DOZE_LPM) {
 		rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_MI_DOZE_LBM);
 		if (rc)
-			pr_err("[%s] failed to send DSI_CMD_SET_MI_DOZE_LBM cmd, rc=%d\n",
+			DSI_ERR("[%s] failed to send DSI_CMD_SET_MI_DOZE_LBM cmd, rc=%d\n",
 					panel->name, rc);
 	} else if (!panel->doze_enabled) {
 		rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_NOLP);
 		if (rc)
-			pr_err("[%s] failed to send DSI_CMD_SET_NOLP cmd, rc=%d\n",
+			DSI_ERR("[%s] failed to send DSI_CMD_SET_NOLP cmd, rc=%d\n",
 					panel->name, rc);
 	}
 
@@ -905,14 +905,14 @@ int dsi_panel_set_fod_hbm(struct dsi_panel *panel, bool status)
 #endif
 		rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_DISP_HBM_FOD_ON);
 		if (rc)
-			pr_err("[%s] failed to send DSI_CMD_SET_MI_HBM_FOD_ON cmd, rc=%d\n",
+			DSI_ERR("[%s] failed to send DSI_CMD_SET_MI_HBM_FOD_ON cmd, rc=%d\n",
 					panel->name, rc);
 	} else if (panel->doze_enabled) {
 		dsi_panel_update_doze(panel);
 	} else {
 		rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_DISP_HBM_FOD_OFF);
 		if (rc)
-			pr_err("[%s] failed to send DSI_CMD_SET_MI_HBM_FOD_OFF cmd, rc=%d\n",
+			DSI_ERR("[%s] failed to send DSI_CMD_SET_MI_HBM_FOD_OFF cmd, rc=%d\n",
 					panel->name, rc);
 					
 					#ifdef CONFIG_EXPOSURE_ADJUSTMENT
@@ -2741,7 +2741,7 @@ static int dsi_panel_parse_fod_dim_lut(struct dsi_panel *panel,
 
 	len = utils->count_u32_elems(utils->data, "mi,mdss-dsi-dimlayer-brightness-alpha-lut");
 	if (len <= 0 || len % BRIGHTNESS_ALPHA_PAIR_LEN) {
-		pr_err("[%s] invalid number of elements, rc=%d\n",
+		DSI_ERR("[%s] invalid number of elements, rc=%d\n",
 				panel->name, rc);
 		rc = -EINVAL;
 		goto count_fail;
@@ -2749,7 +2749,7 @@ static int dsi_panel_parse_fod_dim_lut(struct dsi_panel *panel,
 
 	array = kcalloc(len, sizeof(u32), GFP_KERNEL);
 	if (!array) {
-		pr_err("[%s] failed to allocate memory, rc=%d\n",
+		DSI_ERR("[%s] failed to allocate memory, rc=%d\n",
 				panel->name, rc);
 		rc = -ENOMEM;
 		goto alloc_array_fail;
@@ -2758,7 +2758,7 @@ static int dsi_panel_parse_fod_dim_lut(struct dsi_panel *panel,
 	rc = utils->read_u32_array(utils->data,
 			"mi,mdss-dsi-dimlayer-brightness-alpha-lut", array, len);
 	if (rc) {
-		pr_err("[%s] failed to allocate memory, rc=%d\n",
+		DSI_ERR("[%s] failed to allocate memory, rc=%d\n",
 				panel->name, rc);
 		goto read_fail;
 	}
@@ -2891,7 +2891,7 @@ static int dsi_panel_parse_bl_config(struct dsi_panel *panel)
 
 	rc = dsi_panel_parse_fod_dim_lut(panel, utils);
 	if (rc)
-		pr_err("[%s failed to parse fod dim lut\n", panel->name);
+		DSI_ERR("[%s failed to parse fod dim lut\n", panel->name);
 
 	rc = utils->read_u32(utils->data,
 			"qcom,disp-doze-lpm-backlight", &val);
