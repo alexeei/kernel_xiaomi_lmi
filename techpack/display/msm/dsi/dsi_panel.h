@@ -131,6 +131,7 @@ struct dsi_backlight_config {
 	u32 bl_doze_lpm;
 	u32 bl_doze_hbm;
 	bool bl_inverted_dbv;
+	u32 real_bl_level;
 	u32 bl_dcs_subtype;
 	bool allow_bl_update;
 	u32 unset_bl_level;
@@ -244,12 +245,12 @@ struct dsi_panel {
 	int power_mode;
 	enum dsi_panel_physical_type panel_type;
 
-	bool doze_enabled;
-	enum dsi_doze_mode_type doze_mode;
 	bool resend_ea;
 
 	struct brightness_alpha_pair *fod_dim_lut;
-	u32 fod_dim_lut_count;
+	uint32_t fod_dim_lut_count;
+	bool doze_enabled;
+	enum dsi_doze_mode_type doze_mode;
 };
 
 static inline bool dsi_panel_ulps_feature_enabled(struct dsi_panel *panel)
