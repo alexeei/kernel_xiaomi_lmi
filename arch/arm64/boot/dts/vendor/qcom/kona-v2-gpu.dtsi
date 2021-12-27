@@ -30,17 +30,17 @@
 
 		opp-441600000 {
 			opp-hz = /bits/ 64 <441600000>;
-			opp-microvolt = <RPMH_REGULATOR_LEVEL_SVS_L0>;
+			opp-microvolt = <RPMH_REGULATOR_LEVEL_LOW_SVS>;
 		};
 
 		opp-400000000 {
 			opp-hz = /bits/ 64 <400000000>;
-			opp-microvolt = <RPMH_REGULATOR_LEVEL_SVS>;
+			opp-microvolt = <RPMH_REGULATOR_LEVEL_LOW_SVS>;
 		};
 
 		opp-305000000 {
 			opp-hz = /bits/ 64 <305000000>;
-			opp-microvolt = <RPMH_REGULATOR_LEVEL_LOW_SVS>;
+			opp-microvolt = <RPMH_REGULATOR_LEVEL_MIN_SVS>;
 		};
 	};
 };
@@ -66,7 +66,7 @@
 			qcom,speed-bin = <0>;
 			qcom,initial-pwrlevel = <6>;
 			qcom,throttle-pwrlevel = <1>;
-
+			
 			qcom,gpu-pwrlevel@0 {
 				reg = <0>;
 				qcom,gpu-freq = <670000000>;
@@ -293,6 +293,7 @@
 			#size-cells = <0>;
 			qcom,speed-bin = <3>;
 			qcom,initial-pwrlevel = <4>;
+			qcom,throttle-pwrlevel = <0>;
 
 			qcom,gpu-pwrlevel@0 {
 				reg = <0>;

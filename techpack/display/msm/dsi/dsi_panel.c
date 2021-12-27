@@ -827,27 +827,24 @@ static u32 interpolate(uint32_t x, uint32_t xa, uint32_t xb, uint32_t ya, uint32
 u32 dsi_panel_get_fod_dim_alpha(struct dsi_panel *panel)
 {
 	u32 brightness = dsi_panel_get_backlight(panel);
-	int i, alpha;
+	int i;
 
 	if (!panel->fod_dim_lut)
-		alpha = 0;
+		return 0;
 
 	for (i = 0; i < panel->fod_dim_lut_count; i++)
 		if (panel->fod_dim_lut[i].brightness >= brightness)
 			break;
 
 	if (i == 0)
-		alpha = panel->fod_dim_lut[0].alpha;
+		return panel->fod_dim_lut[i].alpha;
 
-	else if (i == panel->fod_dim_lut_count)
-		alpha = panel->fod_dim_lut[brightness - 1].alpha;
-	else
-		alpha = interpolate(brightness,
-				panel->fod_dim_lut[i - 1].brightness,
-				panel->fod_dim_lut[i].brightness,
-				panel->fod_dim_lut[i - 1].alpha,
-				panel->fod_dim_lut[i].alpha);
-	return alpha;
+	if (i == panel->fod_dim_lut_count)
+		return panel->fod_dim_lut[i - 1].alpha;
+
+	return interpolate(brightness,
+			panel->fod_dim_lut[i - 1].brightness, panel->fod_dim_lut[i].brightness,
+			panel->fod_dim_lut[i - 1].alpha, panel->fod_dim_lut[i].alpha);
 }
 
 int dsi_panel_update_doze(struct dsi_panel *panel) {
@@ -2747,7 +2744,7 @@ static int dsi_panel_parse_fod_dim_lut(struct dsi_panel *panel,
 	int rc;
 	int i;
 
-	len = utils->count_u32_elems(utils->data, "mi,mdss-dsi-dimlayer-brightness-alpha-lut");
+	len = utils->count_u32_elems(utils->data, "qcom,disp-fod-dim-lut");
 	if (len <= 0 || len % BRIGHTNESS_ALPHA_PAIR_LEN) {
 		DSI_ERR("[%s] invalid number of elements, rc=%d\n",
 				panel->name, rc);
@@ -2764,7 +2761,7 @@ static int dsi_panel_parse_fod_dim_lut(struct dsi_panel *panel,
 	}
 
 	rc = utils->read_u32_array(utils->data,
-			"mi,mdss-dsi-dimlayer-brightness-alpha-lut", array, len);
+			"qcom,disp-fod-dim-lut", array, len);
 	if (rc) {
 		DSI_ERR("[%s] failed to allocate memory, rc=%d\n",
 				panel->name, rc);
