@@ -12148,7 +12148,7 @@ void trigger_load_balance(struct rq *rq)
 	/* Don't need to rebalance while attached to NULL domain or
 	 * cpu is isolated.
 	 */
-	if (unlikely(on_null_domain(rq)) || cpu_isolated(cpu_of(rq)))
+	if (unlikely(on_null_domain(rq)) || cpu_isolated(cpu_of(rq)) || !cpu_active(cpu_of(rq)))
 		return;
 
 	if (time_after_eq(jiffies, rq->next_balance))
@@ -12235,6 +12235,14 @@ static void task_fork_fair(struct task_struct *p)
 		se->vruntime = curr->vruntime;
 	}
 	place_entity(cfs_rq, se, 1);
+	
+	#ifdef CONFIG_KPROFILES
+	/* Execute child process before parent after fork according to set kernel profile */
+	if (active_mode() == 1)
+	  sysctl_sched_child_runs_first = 0;
+	else if (active_mode() == 0 || active_mode() == 2 || active_mode() == 3)
+	  sysctl_sched_child_runs_first = 1;
+#endif
 
 	if (sysctl_sched_child_runs_first && curr && entity_before(curr, se)) {
 		/*
