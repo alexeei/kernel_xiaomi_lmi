@@ -37,6 +37,19 @@ static struct kmem_cache *memobjs_cache;
 static struct kmem_cache *sparseobjs_cache;
 
 
+static void free_fence_names(struct kgsl_drawobj_sync *syncobj)
+{
+	unsigned int i;
+
+	for (i = 0; i < syncobj->numsyncs; i++) {
+		struct kgsl_drawobj_sync_event *event = &syncobj->synclist[i];
+
+		if (event->type == KGSL_CMD_SYNCPOINT_TYPE_FENCE)
+			kfree(event->info.fences);
+	}
+}
+
+
 void kgsl_drawobj_destroy_object(struct kref *kref)
 {
 	struct kgsl_drawobj *drawobj = container_of(kref,
@@ -48,6 +61,7 @@ void kgsl_drawobj_destroy_object(struct kref *kref)
 	switch (drawobj->type) {
 	case SYNCOBJ_TYPE:
 		syncobj = SYNCOBJ(drawobj);
+		free_fence_names(syncobj);
 		kfree(syncobj->synclist);
 		kfree(syncobj);
 		break;
@@ -90,15 +104,13 @@ void kgsl_dump_syncpoints(struct kgsl_device *device,
 		}
 		case KGSL_CMD_SYNCPOINT_TYPE_FENCE: {
 
-			break;
-		}
-		case KGSL_CMD_SYNCPOINT_TYPE_TIMELINE: {
 			int j;
-			struct event_timeline_info *info = event->priv;
+			struct event_fence_info *info = &event->info;
 
-			for (j = 0; info && info[j].timeline; j++)
-				dev_err(device->dev, "[%d]  timeline: %d seqno %lld\n",
-					i, info[j].timeline, info[j].seqno);
+			for (j = 0; j < info->num_fences; j++)
+				dev_err(device->dev, "[%d]  fence: %s\n",
+					i, info->fences[j].name);
+
 			break;
 		}
 		}
@@ -151,19 +163,13 @@ static void syncobj_timer(struct timer_list *t)
 			break;
 		case KGSL_CMD_SYNCPOINT_TYPE_FENCE: {
 
-			break;
-		}
-		case KGSL_CMD_SYNCPOINT_TYPE_TIMELINE: {
 			int j;
-			struct event_timeline_info *info = event->priv;
+			struct event_fence_info *info = &event->info;
 
-			dev_err(device->dev, "       [%u] FENCE %s\n",
-				i, dma_fence_is_signaled(event->fence) ?
-					"signaled" : "not signaled");
+			for (j = 0; j < info->num_fences; j++)
+				dev_err(device->dev, "       [%u] FENCE %s\n",
+					i, info->fences[j].name);
 
-			for (j = 0; info && info[j].timeline; j++)
-				dev_err(device->dev, "       TIMELINE %d SEQNO %lld\n",
-					info[j].timeline, info[j].seqno);
 			break;
 		}
 		}
@@ -386,6 +392,11 @@ EXPORT_SYMBOL(kgsl_drawobj_destroy);
 static bool drawobj_sync_fence_func(void *priv)
 {
 	struct kgsl_drawobj_sync_event *event = priv;
+	int i;
+
+	for (i = 0; i < event->info.num_fences; i++)
+		trace_syncpoint_fence_expire(event->syncobj,
+			event->info.fences[i].name);
 
 
 	/*
@@ -496,7 +507,8 @@ static int drawobj_add_sync_fence(struct kgsl_device *device,
 	struct kgsl_drawobj *drawobj = DRAWOBJ(syncobj);
 	struct kgsl_drawobj_sync_event *event;
 
-	unsigned int id;
+	unsigned int id, i;
+
 
 
 	if (kgsl_copy_struct_from_user(&sync, sizeof(sync), data, datasize))
@@ -520,7 +532,8 @@ static int drawobj_add_sync_fence(struct kgsl_device *device,
 
 
 	event->handle = kgsl_sync_fence_async_wait(sync->fd,
-				drawobj_sync_fence_func, event);
+				drawobj_sync_fence_func, event,
+				&event->info);
 
 	if (IS_ERR_OR_NULL(event->handle)) {
 		int ret = PTR_ERR(event->handle);
@@ -539,6 +552,10 @@ static int drawobj_add_sync_fence(struct kgsl_device *device,
 
 		return ret;
 	}
+
+
+	for (i = 0; i < event->info.num_fences; i++)
+		trace_syncpoint_fence(syncobj, event->info.fences[i].name);
 
 
 	return 0;
