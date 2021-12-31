@@ -15,6 +15,8 @@ struct target_nrg {
 int schedtune_cpu_boost_with(int cpu, struct task_struct *p);
 int schedtune_task_boost(struct task_struct *tsk);
 
+int schedtune_task_boost_rcu_locked(struct task_struct *tsk);
+
 int schedtune_prefer_idle(struct task_struct *tsk);
 
 void schedtune_enqueue_task(struct task_struct *p, int cpu);
