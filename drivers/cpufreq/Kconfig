@@ -344,6 +344,16 @@ config SCHEDUTIL_UP_RATE_LIMIT
 	  both cases.
 
 	  If in doubt, say N.
+	  
+	  
+config SCHEDUTIL_DOWN_RATE_LIMIT
+	int "Default down rate-limit for schedutil"
+	default 0
+	help
+	  This sets schedutil's default frequency down rate-limit in
+	  microseconds.
+
+endif
 
 
 comment "CPU frequency scaling drivers"
