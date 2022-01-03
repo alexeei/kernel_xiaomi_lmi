@@ -739,7 +739,12 @@ POLLY_FLAGS	+= -mllvm -polly \
 
 ifeq ($(shell test $(CONFIG_CLANG_VERSION) -gt 130000; echo $$?),0)
 POLLY_FLAGS	+= -mllvm -polly-loopfusion-greedy=1 \
-	     -mllvm -polly-reschedule=1
+	     -mllvm -polly-reschedule=1 \
+	     -mllvm -polly-postopts=1 \
+	     -mllvm -polly-num-threads=0 \
+	     -mllvm -polly-omp-backend=LLVM \
+	     -mllvm -polly-scheduling=dynamic \
+	     -mllvm -polly-scheduling-chunksize=1
 else
 POLLY_FLAGS	+= -mllvm -polly-opt-fusion=max
 endif
@@ -755,7 +760,6 @@ KBUILD_CFLAGS += $(POLLY_FLAGS)
 KBUILD_AFLAGS += $(POLLY_FLAGS)
 KBUILD_LDFLAGS	+= $(POLLY_FLAGS)
 endif
->>>>>>> 826119032f840 (kbuild: Add support for Clang's polyhedral loop optimizer)
 endif
 
 # Tell gcc to never replace conditional load with a non-conditional one
