@@ -7209,8 +7209,10 @@ fail_gsi_pre_fw_load_init:
 fail_ipa_dma_setup:
 	ipa_pm_destroy();
 fail_ipa_pm_init:
+#if 0
 	wakeup_source_unregister(ipa3_ctx->w_lock);
 	ipa3_ctx->w_lock = NULL;
+#endif
 fail_w_source_register:
 	device_destroy(ipa3_ctx->cdev.class, ipa3_ctx->cdev.dev_num);
 fail_device_create:
