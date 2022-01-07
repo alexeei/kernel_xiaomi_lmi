@@ -51,8 +51,8 @@ static const char * const mem_sleep_labels[] = {
 };
 const char *mem_sleep_states[PM_SUSPEND_MAX];
 
-suspend_state_t mem_sleep_current = PM_SUSPEND_MEM_ULTRA;
-suspend_state_t mem_sleep_default = PM_SUSPEND_MEM_ULTRA;
+suspend_state_t mem_sleep_current = PM_SUSPEND_TO_IDLE;
+suspend_state_t mem_sleep_default = PM_SUSPEND_TO_IDLE;
 suspend_state_t pm_suspend_target_state;
 EXPORT_SYMBOL_GPL(pm_suspend_target_state);
 
@@ -123,7 +123,7 @@ static void s2idle_loop(void)
 
 	for (;;) {
 		int error;
-
+        bool leave_s2idle = false;
 		dpm_noirq_begin();
 
 		/*
@@ -136,11 +136,27 @@ static void s2idle_loop(void)
 		 * so prevent them from terminating the loop right away.
 		 */
 		error = dpm_noirq_suspend_devices(PMSG_SUSPEND);
-		if (!error)
+		if (!error) {
 			s2idle_enter();
-		else if (error == -EBUSY && pm_wakeup_pending())
+		/*
+			 * Once we enter s2idle_enter(), returning means that
+			 * either:
+			 * 1) an abort was detected prior to suspending, or
+			 * 2) something caused us to wake from suspended
+			 * If we got an abort or a wakeup interrupt, we need
+			 * to break out of this loop.  If we were woken by
+			 * an interrupt that technically doesn't require a
+			 * full wakeup (only a few corner cases), we're going
+			 * to wake up anyway, because the way this new
+			 * s2idle_loop() flow works, the resume of devices
+			 * below will cause an abort even if we could
+			 * otherwise have looped back into suspend.
+			 */
+			leave_s2idle = true;
+		} else if (error == -EBUSY && pm_wakeup_pending()) {
+			leave_s2idle = true;
 			error = 0;
-
+        }
 		if (!error && s2idle_ops && s2idle_ops->wake)
 			s2idle_ops->wake();
 
@@ -154,7 +170,7 @@ static void s2idle_loop(void)
 		if (s2idle_ops && s2idle_ops->sync)
 			s2idle_ops->sync();
 
-		if (pm_wakeup_pending())
+		if (leave_s2idle || pm_wakeup_pending())
 			break;
 
 		pm_wakeup_clear(false);
