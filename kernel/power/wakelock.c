@@ -82,7 +82,7 @@ static inline void increment_wakelocks_number(void) {}
 static inline void decrement_wakelocks_number(void) {}
 #endif /* CONFIG_PM_WAKELOCKS_LIMIT */
 
-
+#ifdef CONFIG_PM_WAKELOCKS_GC
 #define WL_GC_COUNT_MAX	100
 #define WL_GC_TIME_SEC	100
 
