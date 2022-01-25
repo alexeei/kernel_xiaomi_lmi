@@ -40,7 +40,7 @@ enum {
 static uint32_t binder_alloc_debug_mask = 0;
 =======
 
-#ifdef DEBUG
+#ifdef CONFIG_ANDROID_BINDER_LOGS
 static uint32_t binder_alloc_debug_mask = BINDER_DEBUG_USER_ERROR;
 >>>>>>> ab4e43bc36783 (binder: Stub out more debugging loggers)
 
