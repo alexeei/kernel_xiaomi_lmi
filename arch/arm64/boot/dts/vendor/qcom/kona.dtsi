@@ -486,14 +486,6 @@
 			alignment = <0x0 0x400000>;
 			size = <0x0 0xC00000>;
 		};
-		
-		ramoops: ramoops {
-			compatible = "removed-dma-pool", "ramoops";
-			reg = <0x0 0x96A00000 0x0 0x00100000>;
-			record-size = <0x20000>;
-			console-size = <0x40000>;
-			pmsg-size = <0x20000>;
-		};
 
 		sdsp_mem: sdsp_region {
 			compatible = "shared-dma-pool";
