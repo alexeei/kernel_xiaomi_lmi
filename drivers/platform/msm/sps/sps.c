@@ -3046,7 +3046,6 @@ static int __init sps_init(void)
 	if (!sps->ipc_log4)
 
 		pr_debug("Failed to create IPC log4\n");
-#endif
 
 
 	ret = platform_driver_register(&msm_sps_driver);
