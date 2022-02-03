@@ -692,6 +692,25 @@ include/config/auto.conf:
 endif # may-sync-config
 endif # $(dot-config)
 
+
+ifeq ($(CONFIG_MACH_XIAOMI_CMI)$(CONFIG_MACH_XIAOMI_UMI), y)
+KBUILD_CFLAGS += -DUFS3V0
+else
+KBUILD_CFLAGS += -DUFS3V1
+endif
+
+ifdef CONFIG_LLVM_POLLY
+KBUILD_CFLAGS	+= -mllvm -polly \
+		   -mllvm -polly-run-dce \
+		   -mllvm -polly-run-inliner \
+		   -mllvm -polly-opt-fusion=max \
+		   -mllvm -polly-ast-use-context \
+		   -mllvm -polly-detect-keep-going \
+		   -mllvm -polly-vectorizer=stripmine \
+		   -mllvm -polly-invariant-load-hoisting
+endif
+
+
 KBUILD_CFLAGS	+= $(call cc-option,-fno-delete-null-pointer-checks,)
 KBUILD_CFLAGS	+= $(call cc-disable-warning,frame-address,)
 KBUILD_CFLAGS	+= $(call cc-disable-warning, format-truncation)
