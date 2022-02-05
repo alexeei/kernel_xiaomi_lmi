@@ -3437,7 +3437,9 @@ static void sde_crtc_atomic_flush(struct drm_crtc *crtc,
 	}
 
 	/* schedule the idle notify delayed work */
+
 	if (idle_time && sde_encoder_check_curr_mode(
+
 						sde_crtc->mixers[0].encoder,
 						MSM_DISPLAY_VIDEO_MODE)) {
 		kthread_queue_delayed_work(&event_thread->worker,
