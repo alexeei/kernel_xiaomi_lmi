@@ -746,7 +746,6 @@ void kgsl_pwrctrl_set_constraint(struct kgsl_device *device,
 EXPORT_SYMBOL(kgsl_pwrctrl_set_constraint);
 
 
-
 static ssize_t thermal_pwrlevel_store(struct device *dev,
 				struct device_attribute *attr,
 				 const char *buf, size_t count)
@@ -2233,7 +2232,6 @@ int kgsl_pwrctrl_init(struct kgsl_device *device)
 
 	pwr->power_flags = 0;
 
-	
 
 	pm_runtime_enable(&pdev->dev);
 
@@ -2821,7 +2819,7 @@ _slumber(struct kgsl_device *device)
 		kgsl_pwrctrl_set_state(device, KGSL_STATE_SLUMBER);
 		pm_qos_update_request(&device->pwrctrl.pm_qos_req_dma,
 						PM_QOS_DEFAULT_VALUE);
-		
+
 		break;
 	case KGSL_STATE_SUSPEND:
 		complete_all(&device->hwaccess_gate);

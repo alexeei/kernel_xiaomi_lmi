@@ -20,22 +20,26 @@
 static unsigned int default_efficient_freq_lp[] = {0};
 static u64 default_up_delay_lp[] = {0};
 
+
 static unsigned int default_efficient_freq_hp[] = {1056000,1286400};
 static u64 default_up_delay_hp[] = {500 * NSEC_PER_MSEC, 500 * NSEC_PER_MSEC};
 
 static unsigned int default_efficient_freq_pr[] = {1305600,1747200};
-static u64 default_up_delay_pr[] = {1000 * NSEC_PER_MSEC,1000 * NSEC_PER_MSEC};
+static u64 default_up_delay_pr[] = {100 * NSEC_PER_MSEC,100 * NSEC_PER_MSEC};
+
 
 #define DEFAULT_RTG_BOOST_FREQ_LP 0
 #define DEFAULT_RTG_BOOST_FREQ_HP 0
 #define DEFAULT_RTG_BOOST_FREQ_PR 0
 
 #define DEFAULT_HISPEED_LOAD_LP 100
-#define DEFAULT_HISPEED_LOAD_HP 80
+
+#define DEFAULT_HISPEED_LOAD_HP 100
 #define DEFAULT_HISPEED_LOAD_PR 100
 
 #define DEFAULT_HISPEED_FREQ_LP 0
 #define DEFAULT_HISPEED_FREQ_HP 1478400
+
 #define DEFAULT_HISPEED_FREQ_PR 0
 
 #define DEFAULT_PL_LP 0
@@ -442,7 +446,13 @@ unsigned long schedhorizon_cpu_util(int cpu, unsigned long util_cfs,
 	 */
 	util = util_cfs + cpu_util_rt(rq);
 	if (type == FREQUENCY_UTIL)
+
+#ifdef CONFIG_SCHED_TUNE
+		util += schedtune_cpu_margin_with(util, cpu, p);
+#else
 		util = uclamp_rq_util_with(rq, util, p);
+#endif
+
 	
 	dl_util = cpu_util_dl(rq);
 
