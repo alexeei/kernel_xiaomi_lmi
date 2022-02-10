@@ -49,7 +49,6 @@
 #define KGSL_PWR_SET_LIMIT 2
 
 
-
 enum kgsl_pwrctrl_timer_type {
 	KGSL_PWR_IDLE_TIMER,
 };
@@ -139,9 +138,6 @@ struct gpu_cx_ipeak_client {
  * @gpu_cfg - CPU to GPU AHB path bus scale identifier
  * @irq_name - resource name for the IRQ
  * @clk_stats - structure of clock statistics
- * @l2pc_cpus_mask - mask to avoid L2PC on masked CPUs
- * @l2pc_update_queue - Boolean flag to avoid L2PC on masked CPUs at queue time
- * @l2pc_cpus_qos - qos structure to avoid L2PC on CPUs
  * @pm_qos_req_dma - the power management quality of service structure
  * @pm_qos_active_latency - allowed CPU latency in microseconds when active
  * @pm_qos_cpu_mask_latency - allowed CPU mask latency in microseconds
