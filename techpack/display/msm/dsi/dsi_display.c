@@ -53,6 +53,7 @@ static const struct of_device_id dsi_display_dt_match[] = {
 };
 
 static unsigned int cur_refresh_rate = 60;
+
 struct dsi_display *primary_display;
 
 static void dsi_display_mask_ctrl_error_interrupts(struct dsi_display *display,
@@ -241,7 +242,7 @@ int dsi_display_set_backlight(struct drm_connector *connector,
 
 #ifdef CONFIG_DRM_SDE_EXPO
 	if(panel->dimlayer_exposure) {
-		if (bl_lvl && !panel->doze_enabled) {
+		if (bl_lvl && !panel->doze_enabled  && !panel->hbm_mode) {
 			bl_temp = expo_map_dim_level((u32)bl_temp, dsi_display);
 		}
 	}
@@ -5266,7 +5267,6 @@ static ssize_t sysfs_fod_ui_read(struct device *dev,
 	return snprintf(buf, PAGE_SIZE, "%d\n", status);
 }
 
-
 static ssize_t sysfs_hbm_read(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
@@ -5322,7 +5322,6 @@ error:
 	return ret == 0 ? count : ret;
 }
 
-
 #ifdef CONFIG_DRM_SDE_EXPO
 static ssize_t sysfs_dimlayer_exposure_read(struct device *dev,
 	struct device_attribute *attr, char *buf)
@@ -5376,8 +5375,6 @@ static ssize_t sysfs_dimlayer_exposure_write(struct device *dev,
 }
 #endif
 
-
-
 static DEVICE_ATTR(doze_status, 0644,
                         sysfs_doze_status_read,
                         sysfs_doze_status_write);
@@ -5390,11 +5387,9 @@ static DEVICE_ATTR(fod_ui, 0444,
 			sysfs_fod_ui_read,
 			NULL);
 
-
 static DEVICE_ATTR(hbm, 0644,
                         sysfs_hbm_read,
                         sysfs_hbm_write);
-
 
 #ifdef CONFIG_DRM_SDE_EXPO
 static DEVICE_ATTR(dimlayer_exposure, 0644,
@@ -5402,19 +5397,14 @@ static DEVICE_ATTR(dimlayer_exposure, 0644,
 			sysfs_dimlayer_exposure_write);
 #endif
 
-
-
 static struct attribute *display_fs_attrs[] = {
 	&dev_attr_doze_status.attr,
 	&dev_attr_doze_mode.attr,
 	&dev_attr_fod_ui.attr,
-
-
 	&dev_attr_hbm.attr,
 #ifdef CONFIG_DRM_SDE_EXPO
 	&dev_attr_dimlayer_exposure.attr,
 #endif
-
 	NULL,
 };
 static struct attribute_group display_fs_attrs_group = {
@@ -5526,6 +5516,7 @@ static int dsi_display_bind(struct device *dev,
 	}
 
 	atomic_set(&display->clkrate_change_pending, 0);
+	atomic_set(&display->fod_ui, false);
 	display->cached_clk_rate = 0;
 
 	rc = dsi_display_sysfs_init(display);
@@ -6527,10 +6518,7 @@ int dsi_display_get_info(struct drm_connector *connector,
 	info->max_width = 1920;
 	info->max_height = 1080;
 	info->qsync_min_fps =
-		display->panel->qsync_caps.qsync_min_fps;
-	info->has_qsync_min_fps_list =
-		(display->panel->qsync_caps.qsync_min_fps_list_len > 0) ?
-		true : false;
+		display->panel->qsync_min_fps;
 
 	switch (display->panel->panel_mode) {
 	case DSI_OP_VIDEO_MODE:
@@ -6886,7 +6874,6 @@ exit:
 	*out_modes = display->modes;
 	rc = 0;
 	primary_display = display;
-
 error:
 	if (rc)
 		kfree(display->modes);
@@ -6974,25 +6961,6 @@ int dsi_display_get_default_lms(void *dsi_display, u32 *num_lm)
 	mutex_unlock(&display->display_lock);
 
 	return rc;
-}
-
-int dsi_display_get_qsync_min_fps(void *display_dsi, u32 mode_fps)
-{
-	struct dsi_display *display = (struct dsi_display *)display_dsi;
-	struct dsi_panel *panel;
-	u32 i;
-
-	if (display == NULL || display->panel == NULL)
-		return -EINVAL;
-
-	panel = display->panel;
-	for (i = 0; i < panel->dfps_caps.dfps_list_len; i++) {
-		if (panel->dfps_caps.dfps_list[i] == mode_fps)
-			return panel->qsync_caps.qsync_min_fps_list[i];
-	}
-	SDE_EVT32(mode_fps);
-	DSI_DEBUG("Invalid mode_fps %d\n", mode_fps);
-	return -EINVAL;
 }
 
 int dsi_display_find_mode(struct dsi_display *display,
@@ -7240,9 +7208,9 @@ int dsi_display_set_mode(struct dsi_display *display,
 		goto error;
 	}
 
-	DSI_INFO("mdp_transfer_time_us=%d us\n",
+	DSI_DEBUG("mdp_transfer_time_us=%d us\n",
 			adj_mode.priv_info->mdp_transfer_time_us);
-	DSI_INFO("hactive= %d,vactive= %d,fps=%d\n",
+	DSI_DEBUG("hactive= %d,vactive= %d,fps=%d\n",
 			timing.h_active, timing.v_active,
 			timing.refresh_rate);
 
@@ -7831,7 +7799,7 @@ static int dsi_display_qsync(struct dsi_display *display, bool enable)
 	int i;
 	int rc = 0;
 
-	if (!display->panel->qsync_caps.qsync_min_fps) {
+	if (!display->panel->qsync_min_fps) {
 		DSI_ERR("%s:ERROR: qsync set, but no fps\n", __func__);
 		return 0;
 	}
@@ -7859,7 +7827,7 @@ static int dsi_display_qsync(struct dsi_display *display, bool enable)
 	}
 
 exit:
-	SDE_EVT32(enable, display->panel->qsync_caps.qsync_min_fps, rc);
+	SDE_EVT32(enable, display->panel->qsync_min_fps, rc);
 	mutex_unlock(&display->display_lock);
 	return rc;
 }
@@ -8112,7 +8080,7 @@ int dsi_display_enable(struct dsi_display *display)
 	WRITE_ONCE(cur_refresh_rate, mode->timing.refresh_rate);
 
 	if (mode->dsi_mode_flags & DSI_MODE_FLAG_DMS) {
-		rc = dsi_panel_switch(display->panel);
+		rc = dsi_panel_post_switch(display->panel);
 		if (rc) {
 			DSI_ERR("[%s] failed to switch DSI panel mode, rc=%d\n",
 				   display->name, rc);
@@ -8141,7 +8109,7 @@ int dsi_display_enable(struct dsi_display *display)
 	}
 
 	if (mode->dsi_mode_flags & DSI_MODE_FLAG_DMS) {
-		rc = dsi_panel_post_switch(display->panel);
+		rc = dsi_panel_switch(display->panel);
 		if (rc) {
 			DSI_ERR("[%s] failed to switch DSI panel mode, rc=%d\n",
 				   display->name, rc);

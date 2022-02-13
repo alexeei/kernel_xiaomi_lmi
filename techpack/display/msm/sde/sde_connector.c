@@ -80,7 +80,6 @@ static int sde_backlight_device_update_status(struct backlight_device *bd)
 	int bl_lvl;
 	struct drm_event event;
 	int rc = 0;
-	struct dsi_display *dsi_display = NULL;
 
 	brightness = bd->props.brightness;
 
@@ -98,15 +97,15 @@ static int sde_backlight_device_update_status(struct backlight_device *bd)
 		int bl_min = display->panel->bl_config.bl_min_level ? : 1;
 		int bl_range = display->panel->bl_config.bl_max_level - bl_min;
 
-	/* map UI brightness into driver backlight level rounding it */
+		/* map UI brightness into driver backlight level rounding it */
 		bl_lvl = bl_min + DIV_ROUND_CLOSEST((brightness - 1) * bl_range,
 			display->panel->bl_config.brightness_max_level - 1);
 	} else {
 		bl_lvl = 0;
 	}
 
-	if (!display->panel->bl_config.allow_bl_update) {
-		display->panel->bl_config.unset_bl_level = bl_lvl;
+	if (!c_conn->allow_bl_update) {
+		c_conn->unset_bl_level = bl_lvl;
 		return 0;
 	}
 
@@ -120,7 +119,7 @@ static int sde_backlight_device_update_status(struct backlight_device *bd)
 		}
 		rc = c_conn->ops.set_backlight(&c_conn->base,
 				c_conn->display, bl_lvl);
-		display->panel->bl_config.unset_bl_level = 0;
+		c_conn->unset_bl_level = 0;
 		c_conn->mi_dimlayer_state.current_backlight = bl_lvl;
 	}
 
@@ -521,7 +520,7 @@ void sde_connector_schedule_status_work(struct drm_connector *connector,
 				c_conn->esd_status_interval :
 					STATUS_CHECK_INTERVAL_MS;
 			/* Schedule ESD status check */
-			queue_delayed_work(system_power_efficient_wq, &c_conn->status_work,
+			schedule_delayed_work(&c_conn->status_work,
 				msecs_to_jiffies(interval));
 			c_conn->esd_status_check = true;
 		} else {
@@ -595,7 +594,7 @@ static int _sde_connector_update_bl_scale(struct sde_connector *c_conn)
 	struct dsi_display *dsi_display;
 	struct dsi_backlight_config *bl_config;
 	int rc = 0;
-
+	struct backlight_device *bl_dev;
 	if (!c_conn) {
 		SDE_ERROR("Invalid params sde_connector null\n");
 		return -EINVAL;
@@ -609,15 +608,24 @@ static int _sde_connector_update_bl_scale(struct sde_connector *c_conn)
 		return -EINVAL;
 	}
 
+	bl_dev = c_conn->bl_device;
+	if (!bl_dev) {
+		SDE_ERROR("Invalid params (s) backlight_device null\n");
+		return -EINVAL;
+	}
+
+	mutex_lock(&bl_dev->update_lock);
+
 	bl_config = &dsi_display->panel->bl_config;
 
-	if (!bl_config->allow_bl_update) {
-		bl_config->unset_bl_level = bl_config->bl_level;
+	if (!c_conn->allow_bl_update) {
+		c_conn->unset_bl_level = bl_config->bl_level;
+		mutex_unlock(&bl_dev->update_lock);
 		return 0;
 	}
 
-	if (bl_config->unset_bl_level)
-		bl_config->bl_level = bl_config->unset_bl_level;
+	if (c_conn->unset_bl_level)
+		bl_config->bl_level = c_conn->unset_bl_level;
 
 	bl_config->bl_scale = c_conn->bl_scale > MAX_BL_SCALE_LEVEL ?
 			MAX_BL_SCALE_LEVEL : c_conn->bl_scale;
@@ -629,8 +637,8 @@ static int _sde_connector_update_bl_scale(struct sde_connector *c_conn)
 		bl_config->bl_level);
 	rc = c_conn->ops.set_backlight(&c_conn->base,
 			dsi_display, bl_config->bl_level);
-	bl_config->unset_bl_level = 0;
-
+	c_conn->unset_bl_level = 0;
+        mutex_unlock(&bl_dev->update_lock);
 	return rc;
 }
 
@@ -718,8 +726,6 @@ static int _sde_connector_update_dirty_properties(
 {
 	struct sde_connector *c_conn;
 	struct sde_connector_state *c_state;
-	struct dsi_display *dsi_display = NULL;
-	struct dsi_backlight_config *bl_config = NULL;
 	int idx;
 
 	if (!connector) {
@@ -729,13 +735,6 @@ static int _sde_connector_update_dirty_properties(
 
 	c_conn = to_sde_connector(connector);
 	c_state = to_sde_connector_state(connector->state);
-
-	if (c_conn->connector_type == DRM_MODE_CONNECTOR_DSI) {
-		dsi_display = c_conn->display;
-
-		if (dsi_display && dsi_display->panel)
-			bl_config = &dsi_display->panel->bl_config;
-	}
 
 	mutex_lock(&c_conn->property_info.property_lock);
 	while ((idx = msm_property_pop_dirty(&c_conn->property_info,
@@ -772,7 +771,7 @@ static int _sde_connector_update_dirty_properties(
 	 * Special handling for postproc properties and
 	 * for updating backlight if any unset backlight level is present
 	 */
-	if (c_conn->bl_scale_dirty || (bl_config && bl_config->unset_bl_level)) {
+	if (c_conn->bl_scale_dirty || c_conn->unset_bl_level) {
 		_sde_connector_update_bl_scale(c_conn);
 		c_conn->bl_scale_dirty = false;
 	}
@@ -876,7 +875,7 @@ static int _sde_connector_mi_dimlayer_hbm_fence(struct drm_connector *connector)
 	c_conn = to_sde_connector(connector);
 
 	if (c_conn->connector_type != DRM_MODE_CONNECTOR_DSI)
-		return 0;
+		return -EINVAL;
 
 	dsi_display = (struct dsi_display *) c_conn->display;
 	if (!dsi_display || !dsi_display->panel) {
@@ -891,9 +890,9 @@ static int _sde_connector_mi_dimlayer_hbm_fence(struct drm_connector *connector)
 	}
 
 	if (!c_conn->allow_bl_update) {
-		/*Skip 2 frames after panel on to avoid hbm flicker*/
+		/*Skip 4 frames after panel on to avoid hbm flicker*/
 		if (mi_cfg->dc_type == 1 && dsi_display->panel->power_mode == SDE_MODE_DPMS_ON)
-			skip_frame_count = 2;
+			skip_frame_count = 4;
 		return 0;
 	}
 
@@ -934,18 +933,6 @@ static int _sde_connector_mi_dimlayer_hbm_fence(struct drm_connector *connector)
 				c_conn->fod_frame_count = 0;
 			}
 			if (skip == false) {
-				/* dimming off before hbm ctl */
-				if (mi_cfg->prepare_before_fod_hbm_on && ((mi_cfg->panel_id >> 8) == 0x4A3232003808)) {
-					/* Set flags to disable dimming and backlight */
-					mi_cfg->dimming_state = STATE_DIM_BLOCK;
-					mi_cfg->fod_hbm_enabled = true;
-
-					sde_connector_pre_hbm_ctl(connector);
-					sde_encoder_wait_for_event(c_conn->encoder, MSM_ENC_VBLANK);
-				}
-
-				if (mi_cfg->delay_before_fod_hbm_on)
-					sde_encoder_wait_for_event(c_conn->encoder, MSM_ENC_VBLANK);
 
 				sde_connector_hbm_ctl(connector, DISPPARAM_HBM_FOD_ON);
 
@@ -988,7 +975,7 @@ static int _sde_connector_mi_dimlayer_hbm_fence(struct drm_connector *connector)
 				sde_encoder_wait_for_event(c_conn->encoder, MSM_ENC_VBLANK);
 			sde_connector_hbm_ctl(connector, DISPPARAM_HBM_FOD_OFF);
 			if (mi_cfg->dc_type)
-				sysfs_notify(&c_conn->bl_device->dev.kobj, NULL, "brightness_clone");
+				sysfs_notify(&c_conn->bl_device->dev.kobj, NULL, "brightness");
 			if (mi_cfg->delay_after_fod_hbm_off)
 				sde_encoder_wait_for_event(c_conn->encoder, MSM_ENC_VBLANK);
 
@@ -1074,7 +1061,7 @@ int sde_connector_pre_kickoff(struct drm_connector *connector)
 	struct sde_connector *c_conn;
 	struct sde_connector_state *c_state;
 	struct msm_display_kickoff_params params;
-	struct dsi_display *display;
+	struct dsi_display *display = NULL;
 	int rc;
 
 	if (!connector) {
@@ -1197,8 +1184,7 @@ void sde_connector_helper_bridge_disable(struct drm_connector *connector)
 		backlight_update_status(c_conn->bl_device);
 	}
 
-	if (display && display->panel)
-		display->panel->bl_config.allow_bl_update = false;
+	c_conn->allow_bl_update = false;
 }
 
 void sde_connector_helper_bridge_enable(struct drm_connector *connector)
@@ -1222,8 +1208,7 @@ void sde_connector_helper_bridge_enable(struct drm_connector *connector)
 				BL_UPDATE_DELAY_UNTIL_FIRST_FRAME)
 		sde_encoder_wait_for_event(c_conn->encoder,
 				MSM_ENC_TX_COMPLETE);
-
-	display->panel->bl_config.allow_bl_update = true;
+	c_conn->allow_bl_update = true;
 
 	if (c_conn->bl_device) {
 		c_conn->bl_device->props.power = FB_BLANK_UNBLANK;
@@ -2546,6 +2531,8 @@ static int sde_connector_atomic_check(struct drm_connector *connector,
 		struct drm_connector_state *new_conn_state)
 {
 	struct sde_connector *c_conn;
+	struct sde_connector_state *c_state;
+	bool qsync_dirty = false, has_modeset = false;
 
 	if (!connector) {
 		SDE_ERROR("invalid connector\n");
@@ -2558,6 +2545,19 @@ static int sde_connector_atomic_check(struct drm_connector *connector,
 	}
 
 	c_conn = to_sde_connector(connector);
+	c_state = to_sde_connector_state(new_conn_state);
+
+	has_modeset = sde_crtc_atomic_check_has_modeset(new_conn_state->state,
+						new_conn_state->crtc);
+	qsync_dirty = msm_property_is_dirty(&c_conn->property_info,
+					&c_state->property_state,
+					CONNECTOR_PROP_QSYNC_MODE);
+
+	SDE_DEBUG("has_modeset %d qsync_dirty %d\n", has_modeset, qsync_dirty);
+	if (has_modeset && qsync_dirty) {
+		SDE_ERROR("invalid qsync update during modeset\n");
+		return -EINVAL;
+	}
 
 	if (c_conn->ops.atomic_check)
 		return c_conn->ops.atomic_check(connector,
@@ -2673,7 +2673,7 @@ static void sde_connector_check_status_work(struct work_struct *work)
 		/* If debugfs property is not set then take default value */
 		interval = conn->esd_status_interval ?
 			conn->esd_status_interval : STATUS_CHECK_INTERVAL_MS;
-		queue_delayed_work(system_power_efficient_wq, &conn->status_work,
+		schedule_delayed_work(&conn->status_work,
 			msecs_to_jiffies(interval));
 		return;
 	}
@@ -3263,6 +3263,9 @@ static uint32_t brightness_to_alpha(struct dsi_panel_mi_cfg *mi_cfg, uint32_t br
 	int i;
 	int level = mi_cfg->brightnes_alpha_lut_item_count;
 
+	if (!mi_cfg->brightness_alpha_lut)
+		return 0;
+
 	if (brightness == 0x0)
 		return mi_cfg->brightness_alpha_lut[0].alpha;
 
@@ -3270,6 +3273,9 @@ static uint32_t brightness_to_alpha(struct dsi_panel_mi_cfg *mi_cfg, uint32_t br
 		if (mi_cfg->brightness_alpha_lut[i].brightness >= brightness)
 			break;
 	}
+
+	if (i == 0)
+		return mi_cfg->brightness_alpha_lut[i].alpha;
 
 	if (i == level)
 		return mi_cfg->brightness_alpha_lut[i - 1].alpha;

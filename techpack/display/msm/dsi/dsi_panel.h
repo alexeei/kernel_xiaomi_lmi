@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2020, The Linux Foundation. All rights reserved.
  */
 
 #ifndef _DSI_PANEL_H_
@@ -90,13 +90,6 @@ struct dsi_dfps_capabilities {
 	bool dfps_support;
 };
 
-struct dsi_qsync_capabilities {
-	/* qsync disabled if qsync_min_fps = 0 */
-	u32 qsync_min_fps;
-	u32 *qsync_min_fps_list;
-	int qsync_min_fps_list_len;
-};
-
 struct dsi_dyn_clk_caps {
 	bool dyn_clk_support;
 	u32 *bit_clk_list;
@@ -132,9 +125,6 @@ struct dsi_backlight_config {
 	u32 bl_doze_hbm;
 	bool bl_inverted_dbv;
 	u32 real_bl_level;
-	u32 bl_dcs_subtype;
-	bool allow_bl_update;
-	u32 unset_bl_level;
 
 	int en_gpio;
 	/* PWM params */
@@ -186,8 +176,8 @@ struct drm_panel_esd_config {
 
 #define BRIGHTNESS_ALPHA_PAIR_LEN 2
 struct brightness_alpha_pair {
-	u32 brightness;
-	u32 alpha;
+	uint32_t brightness;
+	uint32_t alpha;
 };
 
 struct dsi_panel {
@@ -233,7 +223,7 @@ struct dsi_panel {
 
 	bool panel_initialized;
 	bool te_using_watchdog_timer;
-	struct dsi_qsync_capabilities qsync_caps;
+	u32 qsync_min_fps;
 
 	char dsc_pps_cmd[DSI_CMD_PPS_SIZE];
 	enum dsi_dms_mode dms_mode;
@@ -245,12 +235,11 @@ struct dsi_panel {
 	int power_mode;
 	enum dsi_panel_physical_type panel_type;
 
-
 	int hbm_mode;
-
 
 	struct brightness_alpha_pair *fod_dim_lut;
 	uint32_t fod_dim_lut_count;
+
 	bool doze_enabled;
 	enum dsi_doze_mode_type doze_mode;
 
@@ -393,14 +382,9 @@ int dsi_panel_create_cmd_packets(const char *data,
 void dsi_panel_destroy_cmd_packets(struct dsi_panel_cmd_set *set);
 void dsi_panel_dealloc_cmd_packets(struct dsi_panel_cmd_set *set);
 
-int dsi_panel_set_doze_status(struct dsi_panel *panel, bool status);
-
-int dsi_panel_set_doze_mode(struct dsi_panel *panel, enum dsi_doze_mode_type mode);
-
 int dsi_panel_set_fod_hbm(struct dsi_panel *panel, bool status);
 
-u32 dsi_panel_get_fod_dim_alpha(struct dsi_panel *panel);
-
+uint32_t dsi_panel_get_fod_dim_alpha(struct dsi_panel *panel);
 
 int dsi_panel_set_doze_status(struct dsi_panel *panel, bool status);
 int dsi_panel_set_doze_mode(struct dsi_panel *panel, enum dsi_doze_mode_type mode);
