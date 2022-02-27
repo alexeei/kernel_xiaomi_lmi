@@ -1319,7 +1319,7 @@ config ARM64_PAN
 	 instruction if the cpu does not implement the feature.
 
 config ARM64_LSE_ATOMICS
-	bool "Atomic instructions"
+	bool "ARMv8.1 atomic instructions"
 	help
 	  As part of the Large System Extensions, ARMv8.1 introduces new
 	  atomic instructions that are designed specifically to scale in
