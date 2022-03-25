@@ -202,6 +202,7 @@
 			qcom,mdss-dsi-dispparam-hbm-fod-off-command-state = "dsi_hs_mode";
 
 
+
 			mi,mdss-dsi-hbm-off-command = [
 				15 01 00 00 00 00 02 53 28
 				39 00 00 00 00 00 03 F0 5A 5A];
