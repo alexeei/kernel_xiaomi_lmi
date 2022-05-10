@@ -53,9 +53,6 @@ GCOV_PROFILE := n
 extra-y += vdso.lds
 CPPFLAGS_vdso.lds += -P -C -U$(ARCH)
 
-# Force dependency (incbin is bad)
-$(obj)/vdso.o : $(obj)/vdso.so
-
 # Link rule for the .so file, .lds has to be first
 $(obj)/vdso.so.dbg: $(src)/vdso.lds $(obj-vdso)
 	$(call if_changed,vdsold_and_vdso_check)
