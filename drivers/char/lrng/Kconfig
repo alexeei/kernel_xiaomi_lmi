@@ -241,6 +241,165 @@ config LRNG_APT_BROKEN
 
 	  If unsure, say N.
 
+
+# menu "Entropy Source Configuration"
+#
+# config LRNG_RUNTIME_ES_CONFIG
+# 	bool "Enable runtime configuration of entropy sources"
+# 	help
+# 	  When enabling this option, the LRNG provides the mechanism
+# 	  allowing to alter the entropy rate of each entropy source
+# 	  during boot time and runtime.
+#
+# 	  Each entropy source allows its entropy rate changed with
+# 	  a kernel command line option. When not providing any
+# 	  option, the default specified during kernel compilation
+# 	  is applied.
+#
+# comment "Common Timer-based Entropy Source Configuration"
+#
+# config LRNG_IRQ_DFLT_TIMER_ES
+# 	bool
+#
+# config LRNG_SCHED_DFLT_TIMER_ES
+# 	bool
+#
+config LRNG_TIMER_COMMON
+	bool
+
+# choice
+# 	prompt "Default Timer-based Entropy Source"
+# 	default LRNG_IRQ_DFLT_TIMER_ES
+# 	depends on LRNG_TIMER_COMMON
+# 	help
+# 	  Select the timer-based entropy source that is credited
+# 	  with entropy. The other timer-based entropy sources may
+# 	  be operational and provide data, but are credited with no
+# 	  entropy.
+#
+# 	config LRNG_IRQ_DFLT_TIMER_ES
+# 	bool "Interrupt Entropy Source"
+# 	depends on LRNG_IRQ
+# 	help
+# 	  The interrupt entropy source is selected as a timer-based
+# 	  entropy source to provide entropy.
+#
+# 	config LRNG_SCHED_DFLT_TIMER_ES
+# 	bool "Scheduler Entropy Source"
+# 	depends on LRNG_SCHED
+# 	help
+# 	  The scheduler entropy source is selected as timer-based
+# 	  entropy source to provide entropy.
+# endchoice
+#
+# choice
+# 	prompt "LRNG Entropy Collection Pool Size"
+# 	default LRNG_COLLECTION_SIZE_1024
+# 	depends on LRNG_TIMER_COMMON
+# 	help
+# 	  Select the size of the LRNG entropy collection pool
+# 	  storing data for the interrupt as well as the scheduler
+# 	  entropy sources without performing a compression
+# 	  operation. The larger the collection size is, the faster
+# 	  the average interrupt handling will be. The collection
+# 	  size represents the number of bytes of the per-CPU memory
+# 	  used to batch up entropy event data.
+#
+# 	  The default value is good for regular operations. Choose
+# 	  larger sizes for servers that have no memory limitations.
+# 	  If runtime memory is precious, choose a smaller size.
+#
+# 	  The collection size is unrelated to the entropy rate
+# 	  or the amount of entropy the LRNG can process.
+#
+# 	config LRNG_COLLECTION_SIZE_32
+# 	depends on LRNG_CONTINUOUS_COMPRESSION_ENABLED
+# 	depends on !LRNG_SWITCHABLE_CONTINUOUS_COMPRESSION
+# 	depends on !CRYPTO_FIPS
+# 		bool "32 interrupt events"
+#
+# 	config LRNG_COLLECTION_SIZE_256
+# 	depends on !CRYPTO_FIPS
+# 		bool "256 interrupt events"
+#
+# 	config LRNG_COLLECTION_SIZE_512
+# 		bool "512 interrupt events"
+#
+# 	config LRNG_COLLECTION_SIZE_1024
+# 		bool "1024 interrupt events (default)"
+#
+# 	config LRNG_COLLECTION_SIZE_2048
+# 		bool "2048 interrupt events"
+#
+# 	config LRNG_COLLECTION_SIZE_4096
+# 		bool "4096 interrupt events"
+#
+# 	config LRNG_COLLECTION_SIZE_8192
+# 		bool "8192 interrupt events"
+#
+# endchoice
+#
+# config LRNG_COLLECTION_SIZE
+# 	int
+# 	default 32 if LRNG_COLLECTION_SIZE_32
+# 	default 256 if LRNG_COLLECTION_SIZE_256
+# 	default 512 if LRNG_COLLECTION_SIZE_512
+# 	default 1024 if LRNG_COLLECTION_SIZE_1024
+# 	default 2048 if LRNG_COLLECTION_SIZE_2048
+# 	default 4096 if LRNG_COLLECTION_SIZE_4096
+# 	default 8192 if LRNG_COLLECTION_SIZE_8192
+#
+# config LRNG_HEALTH_TESTS
+# 	bool "Enable internal entropy source online health tests"
+# 	depends on LRNG_TIMER_COMMON
+# 	help
+# 	  The online health tests applied to the interrupt entropy
+# 	  source and to the scheduler entropy source to validate
+# 	  the noise source at runtime for fatal errors. These tests
+# 	  include SP800-90B compliant tests which are invoked if
+# 	  the system is booted with fips=1. In case of fatal errors
+# 	  during active SP800-90B tests, the issue is logged and
+# 	  the noise data is discarded. These tests are required for
+# 	  full compliance of the interrupt entropy source with
+# 	  SP800-90B.
+#
+# 	  If both, the scheduler and the interrupt entropy sources,
+# 	  are enabled, the health tests for both are applied
+# 	  independent of each other.
+#
+# 	  If unsure, say Y.
+#
+# config LRNG_RCT_BROKEN
+# 	bool "SP800-90B RCT with dangerous low cutoff value"
+# 	depends on LRNG_HEALTH_TESTS
+# 	depends on BROKEN
+# 	default n
+# 	help
+# 	  This option enables a dangerously low SP800-90B repetitive
+# 	  count test (RCT) cutoff value which makes it very likely
+# 	  that the RCT is triggered to raise a self test failure.
+#
+# 	  This option is ONLY intended for developers wanting to
+# 	  test the effectiveness of the SP800-90B RCT health test.
+#
+# 	  If unsure, say N.
+#
+# config LRNG_APT_BROKEN
+# 	bool "SP800-90B APT with dangerous low cutoff value"
+# 	depends on LRNG_HEALTH_TESTS
+# 	depends on BROKEN
+# 	default n
+# 	help
+# 	  This option enables a dangerously low SP800-90B adaptive
+# 	  proportion test (APT) cutoff value which makes it very
+# 	  likely that the APT is triggered to raise a self test
+# 	  failure.
+#
+# 	  This option is ONLY intended for developers wanting to
+# 	  test the effectiveness of the SP800-90B APT health test.
+#
+# 	  If unsure, say N.
+#
 # Default taken from SP800-90B sec 4.4.1 - significance level 2^-30
 config LRNG_RCT_CUTOFF
 	int
