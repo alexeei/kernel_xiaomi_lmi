@@ -1944,8 +1944,17 @@ static void rmap_walk_file(struct page *page, struct rmap_walk_control *rwc,
 	pgoff_start = page_to_pgoff(page);
 	pgoff_end = pgoff_start + hpage_nr_pages(page) - 1;
 	if (!locked) {
-		if (i_mmap_trylock_read(mapping))
-			goto lookup;
+
+	                if (i_mmap_trylock_read(mapping))
+				goto lookup;
+
+			if (rwc->try_lock) {
+				rwc->contended = true;
+				return;
+			}
+
+	        i_mmap_lock_read(mapping);
+        }
 
 		if (rwc->try_lock) {
 			rwc->contended = true;
@@ -1961,6 +1970,7 @@ lookup:
 		goto done;
 	}
 
+lookup:
 	vma_interval_tree_foreach(vma, &mapping->i_mmap,
 			pgoff_start, pgoff_end) {
 		unsigned long address = vma_address(page, vma);

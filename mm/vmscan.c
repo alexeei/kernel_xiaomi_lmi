@@ -2241,8 +2241,12 @@ static void shrink_active_list(unsigned long nr_to_scan,
 
 		/* Referenced or rmap lock contention: rotate */
 		if (page_referenced(page, 0, sc->target_mem_cgroup,
+<<<<<<< HEAD
 				    &vm_flags) != 0) {
 			nr_rotated += hpage_nr_pages(page);
+=======
+				     &vm_flags) != 0) {
+>>>>>>> dde2c85163fa6 (BACKPORT: mm: don't be stuck to rmap lock on reclaim path)
 			/*
 			 * Identify referenced, file-backed active pages and
 			 * give them one more trip around the active list. So
@@ -2254,6 +2258,7 @@ static void shrink_active_list(unsigned long nr_to_scan,
 			 */
 			if ((vm_flags & VM_EXEC) && page_is_file_cache(page)) {
 				list_add(&page->lru, &l_active);
+				nr_rotated += hpage_nr_pages(page);
 				continue;
 			}
 		}
