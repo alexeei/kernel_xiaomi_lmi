@@ -53,7 +53,7 @@ static DEFINE_IDR(zram_index_idr);
 static DEFINE_MUTEX(zram_index_mutex);
 
 static int zram_major;
-static const char *default_compressor = "lzo-rle";
+static const char *default_compressor = "lzo";
 
 /* Module params (documentation at end) */
 static unsigned int num_devices = 1;
@@ -62,8 +62,6 @@ static unsigned int num_devices = 1;
  * uncompressed in memory.
  */
 static size_t huge_class_size;
-
-static struct zram *zram0;
 
 static void zram_free_page(struct zram *zram, size_t index);
 static int zram_bvec_read(struct zram *zram, struct bio_vec *bvec,
@@ -221,17 +219,14 @@ static inline void zram_fill_page(void *ptr, unsigned long len,
 
 static bool page_same_filled(void *ptr, unsigned long *element)
 {
+	unsigned int pos;
 	unsigned long *page;
 	unsigned long val;
-	unsigned int pos, last_pos = PAGE_SIZE / sizeof(*page) - 1;
 
 	page = (unsigned long *)ptr;
 	val = page[0];
 
-	if (val != page[last_pos])
-		return false;
-
-	for (pos = 1; pos < last_pos; pos++) {
+	for (pos = 1; pos < PAGE_SIZE / sizeof(*page); pos++) {
 		if (val != page[pos])
 			return false;
 	}
@@ -2189,25 +2184,56 @@ static ssize_t comp_algorithm_store(struct device *dev,
 	return len;
 }
 
-void zram_compact(void)
+static ssize_t use_dedup_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
 {
-	if (!zram0)
-		return;
+	bool val;
+	struct zram *zram = dev_to_zram(dev);
 
-	down_read(&zram0->init_lock);
-	if (!init_done(zram0)) {
-		up_read(&zram0->init_lock);
-		return;
-	}
+	down_read(&zram->init_lock);
+	val = zram->use_dedup;
+	up_read(&zram->init_lock);
 
-	zs_compact(zram0->mem_pool);
-	up_read(&zram0->init_lock);
+	return scnprintf(buf, PAGE_SIZE, "%d\n", (int)val);
 }
+
+#ifdef CONFIG_ZRAM_DEDUP
+static ssize_t use_dedup_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t len)
+{
+	int val;
+	struct zram *zram = dev_to_zram(dev);
+
+	if (kstrtoint(buf, 10, &val) || (val != 0 && val != 1))
+		return -EINVAL;
+
+	down_write(&zram->init_lock);
+	if (init_done(zram)) {
+		up_write(&zram->init_lock);
+		pr_info("Can't change dedup usage for initialized device\n");
+		return -EBUSY;
+	}
+	zram->use_dedup = val;
+	up_write(&zram->init_lock);
+	return len;
+}
+#endif
+
 
 static ssize_t compact_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t len)
 {
-	zram_compact();
+	struct zram *zram = dev_to_zram(dev);
+
+	down_read(&zram->init_lock);
+	if (!init_done(zram)) {
+		up_read(&zram->init_lock);
+		return -EINVAL;
+	}
+
+	zs_compact(zram->mem_pool);
+	up_read(&zram->init_lock);
+
 	return len;
 }
 
@@ -2571,6 +2597,11 @@ static int __zram_bvec_read(struct zram *zram, struct page *page, u32 index,
 	spin_unlock_irqrestore(&zram->list_lock, flags);
 #endif
 	zram_slot_unlock(zram, index);
+
+	/* Should NEVER happen. Return bio error if it does. */
+	if (unlikely(ret))
+		pr_err("Decompression failed! err=%d, page=%u\n", ret, index);
+
 
 	return ret;
 }
@@ -3230,11 +3261,6 @@ static int zram_add(void)
 		goto out_free_dev;
 	device_id = ret;
 
-	if (device_id >= 1) {
-		ret = -ENOMEM;
-		goto out_free_idr;
-	}
-
 	init_rwsem(&zram->init_lock);
 #ifdef CONFIG_ZRAM_WRITEBACK
 	spin_lock_init(&zram->wb_limit_lock);
@@ -3310,7 +3336,6 @@ static int zram_add(void)
 	strlcpy(zram->compressor, default_compressor, sizeof(zram->compressor));
 
 	zram_debugfs_register(zram);
-	zram0 = zram;
 	pr_info("Added device: %s\n", zram->disk->disk_name);
 	return device_id;
 
@@ -3356,7 +3381,6 @@ static int zram_remove(struct zram *zram)
 	del_gendisk(zram->disk);
 	blk_cleanup_queue(zram->disk->queue);
 	put_disk(zram->disk);
-	zram0 = NULL;
 	kfree(zram);
 	return 0;
 }
