@@ -1444,14 +1444,6 @@ static int afe_apr_send_pkt(void *data, wait_queue_head_t *wait)
 					__func__);
 				ret = -ETIMEDOUT;
 
-#ifdef AUDIO_FORCE_RESTART_ADSP
-				apr_err_count++;
-				if (apr_err_count >= ADSP_TO_LIMITED_COUNT) {
-					apr_err_count = 0;
-					pr_err("%s: DSP returned error more than limited, restart now !\n", __func__);
-					subsystem_restart("adsp");
-				}
-#endif
 			} else if (atomic_read(&this_afe.status) > 0) {
 				pr_err("%s: DSP returned error[%s]\n", __func__,
 					adsp_err_get_err_str(atomic_read(
