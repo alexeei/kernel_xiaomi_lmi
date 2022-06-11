@@ -4,7 +4,6 @@
 #
 
 obj-y				+= mem.o
-obj-$(CONFIG_SRANDOM)		+= srandom.o
 ifeq ($(CONFIG_LRNG),y)
   obj-y				+= lrng/
 else

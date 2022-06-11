@@ -1,6 +1,6 @@
 config SRANDOM
 	tristate "Seed Random Number Generator by josenk"
-	default n
+	default y
 	depends on !HW_RANDOM
 
 	---help---
