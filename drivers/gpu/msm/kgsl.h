@@ -559,13 +559,13 @@ static inline void kgsl_schedule_work(struct work_struct *work)
 	queue_work(kgsl_driver.workqueue, work);
 }
 
-static inline struct kgsl_mem_entry *
+static inline int
 kgsl_mem_entry_get(struct kgsl_mem_entry *entry)
 {
-	if (!IS_ERR_OR_NULL(entry) && kref_get_unless_zero(&entry->refcount))
-		return entry;
+if (entry)
+		return kref_get_unless_zero(&entry->refcount);
+	return 0;
 
-	return NULL;
 }
 
 static inline void
