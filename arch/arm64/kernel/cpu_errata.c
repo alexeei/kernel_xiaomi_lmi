@@ -696,41 +696,15 @@ static const struct midr_range arm64_harden_el2_vectors[] = {
 
 #endif
 
-#ifdef CONFIG_ARM64_ERRATUM_858921
 
-static const struct midr_range arm64_workaround_858921_cpus[] = {
-	/* Cortex-A73 all versions */
-	MIDR_ALL_VERSIONS(MIDR_CORTEX_A73),
-	/* KRYO2XX Gold all versions */
-	MIDR_ALL_VERSIONS(MIDR_KRYO2XX_GOLD),
+#ifdef CONFIG_ARM64_ERRATUM_1742098
+static struct midr_range broken_aarch32_aes[] = {
+	MIDR_RANGE(MIDR_CORTEX_A57, 0, 1, 0xf, 0xf),
+	MIDR_ALL_VERSIONS(MIDR_CORTEX_A72),
 	{},
 };
-
 #endif
 
-#ifdef CONFIG_ARM64_ERRATUM_1188873
-
-static const struct midr_range arm64_workaround_1188873_cpus[] = {
-	/* Cortex-A76 r0p0 to r2p0 */
-	MIDR_RANGE(MIDR_CORTEX_A76, 0, 0, 2, 0),
-	/* Kryo-4G r15p14 */
-	MIDR_RANGE(MIDR_KRYO4G, 15, 14, 15, 14),
-	{},
-};
-
-#endif
-
-#ifdef CONFIG_ARM64_ERRATUM_845719
-
-static const struct midr_range arm64_workaround_845719_cpus[] = {
-	/* Cortex-A53 r0p[01234] */
-	MIDR_RANGE(MIDR_CORTEX_A53, 0, 0, 0, 4),
-	/* Kryo2xx Silver rAp4 */
-	MIDR_RANGE(MIDR_KRYO2XX_SILVER, 0xA, 0x4, 0xA, 0x4),
-	{},
-};
-
-#endif
 
 const struct arm64_cpu_capabilities arm64_errata[] = {
 #if	defined(CONFIG_ARM64_ERRATUM_826319) || \
@@ -944,6 +918,14 @@ const struct arm64_cpu_capabilities arm64_errata[] = {
 		.type = ARM64_CPUCAP_LOCAL_CPU_ERRATUM,
 		.matches = has_neoverse_n1_erratum_1542419,
 		.cpu_enable = cpu_enable_trap_ctr_access,
+	},
+#endif
+#ifdef CONFIG_ARM64_ERRATUM_1742098
+	{
+		.desc = "ARM erratum 1742098",
+		.capability = ARM64_WORKAROUND_1742098,
+		CAP_MIDR_RANGE_LIST(broken_aarch32_aes),
+		.type = ARM64_CPUCAP_LOCAL_CPU_ERRATUM,
 	},
 #endif
 	{
