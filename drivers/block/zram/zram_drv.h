@@ -51,10 +51,7 @@ enum zram_pageflags {
 	ZRAM_WB,	/* page is stored on backing_device */
 	ZRAM_UNDER_WB,	/* page is under writeback */
 	ZRAM_IDLE,	/* not accessed page since last idle marking */
-	ZRAM_EXPIRE,
-	ZRAM_READ_BDEV,
-	ZRAM_PPR,
-	ZRAM_UNDER_PPR,
+	ZRAM_DEDUPED,	/* Deduplicated with existing entry */
 
 	__NR_ZRAM_PAGEFLAGS,
 };
@@ -78,9 +75,6 @@ struct zram_table_entry {
 	unsigned long flags;
 #ifdef CONFIG_ZRAM_MEMORY_TRACKING
 	ktime_t ac_time;
-#endif
-#ifdef CONFIG_ZRAM_LRU_WRITEBACK
-	struct list_head lru_list;
 #endif
 };
 
@@ -113,36 +107,6 @@ struct zram_hash {
 	spinlock_t lock;
 	struct rb_root rb_root;
 };
-
-struct zram_wb_work {
-	struct work_struct work;
-	struct page *src_page;
-	struct page *dst_page;
-	struct bio *bio;
-	struct zram *zram;
-	unsigned long handle;
-};
-
-struct zram_wb_entry {
-	unsigned long index;
-	unsigned int offset;
-	unsigned int size;
-};
-
-struct zwbs {
-	struct zram_wb_entry entry[ZRAM_WB_THRESHOLD];
-	struct page *page;
-	u32 cnt;
-	u32 off;
-};
-
-void free_zwbs(struct zwbs **);
-int alloc_zwbs(struct zwbs **);
-bool zram_is_app_launch(void);
-int is_writeback_entry(swp_entry_t);
-void swap_add_to_list(struct list_head *, swp_entry_t);
-void swap_writeback_list(struct zwbs **, struct list_head *);
-#endif
 
 struct zram {
 	struct zram_table_entry *table;
@@ -178,20 +142,6 @@ struct zram {
 #endif
 #ifdef CONFIG_ZRAM_MEMORY_TRACKING
 	struct dentry *debugfs_dir;
-#endif
-#ifdef CONFIG_ZRAM_LRU_WRITEBACK
-	struct task_struct *wbd;
-	wait_queue_head_t wbd_wait;
-	u8 *wb_table;
-	unsigned long *chunk_bitmap;
-	bool wbd_running;
-	bool io_complete;
-	struct list_head list;
-	spinlock_t list_lock;
-	spinlock_t wb_table_lock;
-	spinlock_t bitmap_lock;
-	unsigned long *blk_bitmap;
-	struct mutex blk_bitmap_lock;
 #endif
 };
 

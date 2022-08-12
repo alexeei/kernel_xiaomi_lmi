@@ -384,7 +384,7 @@ static ssize_t backing_dev_store(struct device *dev,
 	struct inode *inode;
 	struct address_space *mapping;
 	unsigned int bitmap_sz;
-	unsigned long nr_pages, *bitmap = NULL;
+	unsigned long nr_pages, nr_size, *bitmap = NULL;
 	struct block_device *bdev = NULL;
 	int err;
 	struct zram *zram = dev_to_zram(dev);
@@ -430,13 +430,20 @@ static ssize_t backing_dev_store(struct device *dev,
 		goto out;
 	}
 
-	nr_pages = i_size_read(inode) >> PAGE_SHIFT;
+	nr_size = i_size_read(inode);
+	nr_pages = nr_size >> PAGE_SHIFT;
 	bitmap_sz = BITS_TO_LONGS(nr_pages) * sizeof(long);
 	bitmap = kvzalloc(bitmap_sz, GFP_KERNEL);
 	if (!bitmap) {
 		err = -ENOMEM;
 		goto out;
 	}
+
+	// Trim the device
+	pr_info("discarding backing device\n");
+	err = blkdev_issue_discard(bdev, 0, nr_size >> 9, GFP_KERNEL, 0);
+	if (err)
+		pr_warn("failed to discard device: %d\n", err);
 
 	reset_bdev(zram);
 
@@ -609,6 +616,7 @@ static ssize_t writeback_store(struct device *dev,
 
 		if (zram_test_flag(zram, index, ZRAM_WB) ||
 				zram_test_flag(zram, index, ZRAM_SAME) ||
+				zram_test_flag(zram, index, ZRAM_DEDUPED) ||
 				zram_test_flag(zram, index, ZRAM_UNDER_WB))
 			goto next;
 
@@ -1361,6 +1369,7 @@ static int __zram_bvec_write(struct zram *zram, struct bio_vec *bvec,
 
 	entry = zram_dedup_find(zram, page, &checksum);
 	if (entry) {
+		flags = ZRAM_DEDUPED;
 		comp_len = entry->len;
 		goto out;
 	}
@@ -1442,12 +1451,15 @@ out:
 	zram_slot_lock(zram, index);
 	zram_free_page(zram, index);
 
-
 	switch (flags) {
 	case ZRAM_SAME:
 		zram_set_flag(zram, index, flags);
 		zram_set_element(zram, index, element);
-	}  else {
+		break;
+	case ZRAM_DEDUPED:
+		zram_set_flag(zram, index, flags);
+		// Fallthrough
+	default:
 		zram_set_entry(zram, index, entry);
 		zram_set_obj_size(zram, index, comp_len);
 	}
@@ -1752,7 +1764,8 @@ static ssize_t disksize_store(struct device *dev,
 
 	disksize = memparse(buf, NULL);
 	if (!disksize)
-		return -EINVAL;
+		disksize = (u64)SZ_1G * CONFIG_ZRAM_SIZE_OVERRIDE;
+		pr_info("Overriding zram size to %li", disksize);
 
 	down_write(&zram->init_lock);
 	if (init_done(zram)) {
