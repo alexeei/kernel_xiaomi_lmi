@@ -33,6 +33,7 @@
 #include <linux/percpu-rwsem.h>
 #include <linux/cpuset.h>
 #include <linux/random.h>
+#include <uapi/linux/sched/types.h>
 
 #include <trace/events/power.h>
 #define CREATE_TRACE_POINTS
