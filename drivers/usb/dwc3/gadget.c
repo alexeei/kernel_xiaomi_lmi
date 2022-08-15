@@ -3137,15 +3137,6 @@ static int dwc3_gadget_ep_cleanup_completed_request(struct dwc3_ep *dep,
 	int request_status;
 	int ret;
 
-	/*
-	 * If the HWO is set, it implies the TRB is still being
-	 * processed by the core. Hence do not reclaim it until
-	 * it is processed by the core.
-	 */
-	if (req->trb->ctrl & DWC3_TRB_CTRL_HWO) {
-		dbg_event(0xFF, "PEND TRB", dep->number);
-		return 1;
-	}
 
 	if (req->request.num_mapped_sgs)
 		ret = dwc3_gadget_ep_reclaim_trb_sg(dep, req, event,
