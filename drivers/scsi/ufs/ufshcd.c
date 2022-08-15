@@ -288,25 +288,9 @@ static void ufshcd_hex_dump(struct ufs_hba *hba, const char * const str,
 	char prefix_str[MAX_PREFIX_STR_SIZE] = {0};
 
 
-	if (offset % 4 != 0 || len % 4 != 0) /* keep readl happy */
-		return -EINVAL;
+	
 
-	regs = kzalloc(len, GFP_KERNEL);
-	if (!regs)
-		return -ENOMEM;
-
-	for (pos = 0; pos < len; pos += 4) {
-		if (offset == 0 &&
-		    pos >= REG_UIC_ERROR_CODE_PHY_ADAPTER_LAYER &&
-		    pos <= REG_UIC_ERROR_CODE_DME)
-			continue;
-		regs[pos / 4] = ufshcd_readl(hba, offset + pos);
-	}
-
-	ufshcd_hex_dump(prefix, regs, len);
-	kfree(regs);
-
-	return 0;
+	
 }
 
 enum {
