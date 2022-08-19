@@ -4953,10 +4953,10 @@ sk_filter_func_proto(enum bpf_func_id func_id, const struct bpf_prog *prog)
 		return &bpf_get_socket_cookie_proto;
 	case BPF_FUNC_get_socket_uid:
 		return &bpf_get_socket_uid_proto;
-	#if IS_ENABLED(CONFIG_MIHW)
+#if IS_ENABLED(CONFIG_MIHW)
 	case BPF_FUNC_get_comm_hash_from_sk:
 		return &bpf_get_comm_hash_from_sk_proto;
-	#endif
+#endif
 	default:
 		return bpf_base_func_proto(func_id);
 	}

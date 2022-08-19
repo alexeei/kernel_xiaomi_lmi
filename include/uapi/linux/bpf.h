@@ -92,7 +92,7 @@ enum bpf_cmd {
 	BPF_OBJ_GET,
 	BPF_PROG_ATTACH,
 	BPF_PROG_DETACH,
-	#if IS_ENABLED(CONFIG_MIHW)
+#if IS_ENABLED(CONFIG_MIHW)
 	BPF_GET_COMM_HASH,
 #endif
 	BPF_PROG_TEST_RUN,
@@ -428,6 +428,7 @@ union bpf_attr {
 		__u64		probe_offset;	/* output: probe_offset */
 		__u64		probe_addr;	/* output: probe_addr */
 	} task_fd_query;
+
 #if IS_ENABLED(CONFIG_MIHW)
 	struct { /* anonymous struct used by BPF_GET_COMM_HASH/DETACH commands */
 		__aligned_u64	hash;	/* the hash of process comm */
