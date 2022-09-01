@@ -1714,7 +1714,8 @@ static struct notifier_block random_ready = {
 
 static int __init initialize_ptr_random(void)
 {
-	int ret = add_random_ready_callback(&random_ready);
+	int key_size = sizeof(ptr_key);
+	int ret;
 
 	/* Use hw RNG if available. */
 	if (get_random_bytes_arch(&ptr_key, key_size) == key_size) {
