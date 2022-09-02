@@ -58,7 +58,6 @@
 
 #include <linux/siphash.h>
 
- belongs)
 #include <crypto/blake2s.h>
 #include <asm/processor.h>
 #include <asm/irq.h>
