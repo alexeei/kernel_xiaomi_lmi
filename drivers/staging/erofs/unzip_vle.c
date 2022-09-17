@@ -234,6 +234,7 @@ static int z_erofs_vle_work_add_page(struct z_erofs_vle_work_builder *builder,
 				     bool pvec_safereuse)
 {
 	int ret;
+	bool occupied;
 
 	/* give priority for the compressed data storage */
 	if (builder->role >= Z_EROFS_VLE_WORK_PRIMARY &&
@@ -241,8 +242,9 @@ static int z_erofs_vle_work_add_page(struct z_erofs_vle_work_builder *builder,
 		try_to_reuse_as_compressed_page(builder, page))
 		return 0;
 
-	ret = z_erofs_pagevec_ctor_enqueue(&builder->vector, page, type,
-					   pvec_safereuse);
+
+	ret = z_erofs_pagevec_ctor_enqueue(&builder->vector,
+		page, type, &occupied);
 	builder->work->vcnt += (unsigned)ret;
 	return ret ? 0 : -EAGAIN;
 }
