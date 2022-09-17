@@ -242,8 +242,8 @@ static int z_erofs_vle_work_add_page(
 		try_to_reuse_as_compressed_page(builder, page))
 		return 0;
 
-
-	ret = z_erofs_pagevec_ctor_enqueue(&builder->vector, page, type);
+	ret = z_erofs_pagevec_ctor_enqueue(&builder->vector,
+		page, type, &occupied);
 	builder->work->vcnt += (unsigned)ret;
 
 	return ret ? 0 : -EAGAIN;
