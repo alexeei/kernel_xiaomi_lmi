@@ -41,7 +41,7 @@ TRACE_EVENT(erofs_lookup,
 
 	TP_fast_assign(
 		__entry->dev	= dir->i_sb->s_dev;
-		__entry->nid	= EROFS_V(dir)->nid;
+		__entry->nid	= EROFS_I(dir)->nid;
 		__entry->name	= dentry->d_name.name;
 		__entry->flags	= flags;
 	),
