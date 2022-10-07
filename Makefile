@@ -722,8 +722,8 @@ KBUILD_CFLAGS   += -Os
 KBUILD_AFLAGS   += -Os
 KBUILD_LDFLAGS  += -Os
 else
-KBUILD_CFLAGS   += -O3
-KBUILD_AFLAGS   += -O3
+KBUILD_CFLAGS   += -O3 -march=armv8.1-a+crypto+fp16+rcpc
+KBUILD_AFLAGS   += -O3 -march=armv8.1-a+crypto+fp16+rcpc
 KBUILD_LDFLAGS  += -O3
 endif
 
