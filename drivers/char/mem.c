@@ -36,6 +36,10 @@
 # include <linux/efi.h>
 #endif
 
+#ifdef CONFIG_SRANDOM
+#include <../drivers/char/srandom/srandom.h>
+#endif
+
 #define DEVPORT_MINOR	4
 
 static inline unsigned long size_inside_page(unsigned long start,
