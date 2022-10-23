@@ -129,6 +129,8 @@ static inline int avc_hash(u32 ssid, u32 tsid, u16 tclass)
 	return (ssid ^ (tsid<<2) ^ (tclass<<4)) & (AVC_CACHE_SLOTS - 1);
 }
 
+#ifdef CONFIG_AUDIT
+
 /**
  * avc_dump_av - Display an access vector in human-readable form.
  * @tclass: target security class
@@ -164,6 +166,7 @@ static void avc_dump_av(struct audit_buffer *ab, u16 tclass, u32 av)
 
 	audit_log_format(ab, " }");
 }
+#endif
 
 /**
  * avc_dump_query - Display a SID pair and a class in human-readable form.
@@ -490,6 +493,7 @@ static inline int avc_xperms_audit(struct selinux_state *state,
 				   u8 perm, int result,
 				   struct common_audit_data *ad)
 {
+#ifdef CONFIG_AUDIT
 	u32 audited, denied;
 
 	audited = avc_xperms_audit_required(
@@ -498,7 +502,11 @@ static inline int avc_xperms_audit(struct selinux_state *state,
 		return 0;
 	return slow_avc_audit(state, ssid, tsid, tclass, requested,
 			audited, denied, result, ad);
+#else
+    return 0;
+#endif
 }
+
 
 static void avc_node_free(struct rcu_head *rhead)
 {
@@ -725,6 +733,8 @@ found:
 	return node;
 }
 
+#ifdef CONFIG_AUDIT
+
 /**
  * avc_audit_pre_callback - SELinux specific information
  * will be called by generic audit code
@@ -789,6 +799,7 @@ noinline int slow_avc_audit(struct selinux_state *state,
 	common_lsm_audit(a, avc_audit_pre_callback, avc_audit_post_callback);
 	return 0;
 }
+#endif
 
 /**
  * avc_add_callback - Register a callback for security events.
