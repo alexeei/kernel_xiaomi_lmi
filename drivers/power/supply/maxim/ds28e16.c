@@ -1,6 +1,5 @@
 /*******************************************************************************
  * Copyright (C) 2015 Maxim Integrated Products, Inc., All Rights Reserved.
- * Copyright (C) 2021 XiaoMi, Inc.
  *
  *******************************************************************************
  *
@@ -33,7 +32,7 @@
 #include <linux/random.h>
 #include <linux/sched.h>
 
-#define ds_info	pr_info
+#define ds_info	pr_debug
 #define ds_dbg	pr_debug
 #define ds_err	pr_err
 #define ds_log	pr_debug
@@ -45,6 +44,10 @@ struct ds28e16_data {
 	int version;
 	int cycle_count;
 	bool batt_verified;
+#ifdef	CONFIG_FACTORY_BUILD
+	bool factory_enable;
+#endif
+
 	struct delayed_work	battery_verify_work;
 	struct power_supply *verify_psy;
 	struct power_supply_desc verify_psy_d;
@@ -99,9 +102,9 @@ static void set_sched_affinity_to_current(void)
     ret = sched_setaffinity(CURRENT_DS28E16_TASK, cpumask_of(current_cpu));
     preempt_enable();
     if(ret) {
-        pr_info("Setting cpu affinity to current cpu failed(%ld) in %s.\n", ret, __func__);
+        pr_debug("Setting cpu affinity to current cpu failed(%ld) in %s.\n", ret, __func__);
     } else {
-        pr_info("Setting cpu affinity to current cpu(%d) in %s.\n", current_cpu, __func__);
+        pr_debug("Setting cpu affinity to current cpu(%d) in %s.\n", current_cpu, __func__);
     }
 }
 
@@ -113,9 +116,9 @@ static void set_sched_affinity_to_all(void)
     cpumask_setall(&dstp);
     ret = sched_setaffinity(CURRENT_DS28E16_TASK, &dstp);
     if(ret) {
-        pr_info("Setting cpu affinity to all valid cpus failed(%ld) in %s.\n", ret, __func__);
+        pr_debug("Setting cpu affinity to all valid cpus failed(%ld) in %s.\n", ret, __func__);
     } else {
-        pr_info("Setting cpu affinity to all valid cpus in %s.\n", __func__);
+        pr_debug("Setting cpu affinity to all valid cpus in %s.\n", __func__);
     }
 }
 
@@ -158,7 +161,7 @@ short Read_RomID(unsigned char *RomID)
 	for (i = 0; i < 8; i++)
 		RomID[i] = read_byte();
 
-	ds_info("RomID = %02x,%02x,%02x,%02x,%02x,%02x,%02x,%02x\n",
+	ds_dbg("RomID = %02x,%02x,%02x,%02x,%02x,%02x,%02x,%02x\n",
 	RomID[0], RomID[1], RomID[2], RomID[3],
 	RomID[4], RomID[5], RomID[6], RomID[7]);
 
@@ -183,7 +186,7 @@ static int ds28el16_Read_RomID_retry(unsigned char *RomID)
 
 	set_sched_affinity_to_current();
 	for (i = 0; i < GET_ROM_ID_RETRY; i++) {
-		ds_info("read rom id communication start %d...\n", i);
+		ds_dbg("read rom id communication start %d...\n", i);
 
 		if (Read_RomID(RomID) == DS_TRUE){
 			set_sched_affinity_to_all();
@@ -200,7 +203,7 @@ static int ds28el16_get_page_status_retry(unsigned char *data)
 
 	set_sched_affinity_to_current();
 	for (i = 0; i < GET_BLOCK_STATUS_RETRY; i++) {
-		ds_info("read page status communication start... %d\n", i);
+		ds_dbg("read page status communication start... %d\n", i);
 
 		if (DS28E16_cmd_readStatus(data) == DS_TRUE) {
 			set_sched_affinity_to_all();
@@ -1016,6 +1019,9 @@ static int verify_get_property(struct power_supply *psy, enum power_supply_prope
 	unsigned char pagedata[16] = {0x00};
 	unsigned char buf[50];
 	int ret;
+#ifdef	CONFIG_FACTORY_BUILD
+	static bool chip_ok_flag;
+#endif
 
 	switch (psp) {
 	case POWER_SUPPLY_PROP_VERIFY_MODEL_NAME:
@@ -1048,10 +1054,23 @@ static int verify_get_property(struct power_supply *psy, enum power_supply_prope
 		ds_err("get chip_ok read RomID = %02x,%02x,%02x,%02x,%02x,%02x,%02x,%02x\n",
 				mi_romid[0], mi_romid[1], mi_romid[2], mi_romid[3],
 				mi_romid[4], mi_romid[5], mi_romid[6], mi_romid[7]);
+#ifdef CONFIG_FACTORY_BUILD
+		ds_err("CONFIG_FACTORY_BUILD, chip_ok_flag=%d.\n", chip_ok_flag);
+		if ((mi_romid[0] == 0x9f) && (mi_romid[6] == 0x04) && ((mi_romid[5] & 0xf0) == 0xf0)) {
+			val->intval = true;
+			if (data->factory_enable)
+				chip_ok_flag = true;
+		} else if (chip_ok_flag) {
+			val->intval = true;
+		} else {
+			val->intval = false;
+		}
+#else
 		if ((mi_romid[0] == 0x9f) && (mi_romid[6] == 0x04) && ((mi_romid[5] & 0xf0) == 0xf0))
 			val->intval = true;
 		else
 			val->intval = false;
+#endif
 		break;
 	case POWER_SUPPLY_PROP_DS_STATUS:
 		ret = DS28E16_cmd_readStatus(buf);
@@ -1139,7 +1158,7 @@ static int verify_set_property(struct power_supply *psy,
 		}
 		break;
 	default:
-		ds_err("unsupported property %d\n", prop);
+		ds_dbg("unsupported property %d\n", prop);
 		return -ENODATA;
 	}
 
@@ -1216,6 +1235,11 @@ static int ds28e16_parse_dt(struct device *dev,
 		ds_err("Unable to read bootloader address\n");
 	else if (error != -EINVAL)
 		pdata->version = val;
+
+#ifdef	CONFIG_FACTORY_BUILD
+	pdata->factory_enable = of_property_read_bool(np,
+			"mi,factory-enable");
+#endif
 
 	return 0;
 }
@@ -1624,16 +1648,16 @@ static void battery_verify(struct work_struct *work)
 
 	if (result == DS_TRUE) {
 		data->batt_verified = 1;
-		ds_info("%s batt_verified = 1 \n", __func__);
+		ds_dbg("%s batt_verified = 1 \n", __func__);
 	} else {
 		data->batt_verified = 0;
 		if (count < VERIFY_MAX_COUNT) {
-			schedule_delayed_work(&data->battery_verify_work,
+			queue_delayed_work(system_power_efficient_wq, &data->battery_verify_work,
 						msecs_to_jiffies(VERIFY_PERIOD_S));
-			ds_info("%s battery verify failed times[%d]", __func__, count);
+			ds_dbg("%s battery verify failed times[%d]", __func__, count);
 			count++;
 		} else {
-			ds_info("%s battery verify failed[%d]", __func__, result);
+			ds_dbg("%s battery verify failed[%d]", __func__, result);
 		}
 	}
 }
@@ -1678,7 +1702,7 @@ static int ds28e16_probe(struct platform_device *pdev)
 	ds28e16_data->pdev = pdev;
 	platform_set_drvdata(pdev, ds28e16_data);
 	INIT_DELAYED_WORK(&ds28e16_data->battery_verify_work, battery_verify);
-	schedule_delayed_work(&ds28e16_data->battery_verify_work, msecs_to_jiffies(0));
+	queue_delayed_work(system_power_efficient_wq, &ds28e16_data->battery_verify_work, msecs_to_jiffies(0));
 	retval = verify_psy_register(ds28e16_data);
 	if (retval) {
 		ds_err("Failed to verify_psy_register, err:%d\n", retval);

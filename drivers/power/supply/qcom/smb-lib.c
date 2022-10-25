@@ -26,7 +26,14 @@
 		__func__, ##__VA_ARGS__)	\
 
 #define smblib_dbg(chg, reason, fmt, ...)			\
-	do { } while (0)
+	do {							\
+		if (*chg->debug_mask & (reason))		\
+			pr_info("%s: %s: " fmt, chg->name,	\
+				__func__, ##__VA_ARGS__);	\
+		else						\
+			pr_debug("%s: %s: " fmt, chg->name,	\
+				__func__, ##__VA_ARGS__);	\
+	} while (0)
 
 static bool is_secure(struct smb_charger *chg, int addr)
 {
@@ -955,19 +962,12 @@ int smblib_set_icl_current(struct smb_charger *chg, int icl_ua)
 	if (icl_ua == INT_MAX)
 		goto override_suspend_config;
 
-#ifdef CONFIG_FORCE_FAST_CHARGE
-	if (force_fast_charge > 0 &&
-			chg->real_charger_type == POWER_SUPPLY_TYPE_USB &&
-			icl_ua == USBIN_500MA)
-		icl_ua = USBIN_900MA;
-#endif
-
 	/* configure current */
 	if (chg->typec_mode == POWER_SUPPLY_TYPEC_SOURCE_DEFAULT
 		&& (chg->real_charger_type == POWER_SUPPLY_TYPE_USB)) {
 		rc = set_sdp_current(chg, icl_ua);
 		if (rc < 0) {
-			smblib_dbg(chg, "Couldn't set SDP ICL rc=%d\n", rc);
+			smblib_err(chg, "Couldn't set SDP ICL rc=%d\n", rc);
 			goto enable_icl_changed_interrupt;
 		}
 	} else {
@@ -2164,8 +2164,13 @@ int smblib_set_prop_batt_status(struct smb_charger *chg,
 int smblib_set_prop_system_temp_level(struct smb_charger *chg,
 				const union power_supply_propval *val)
 {
-	if ((val->intval < 0) || (chg->thermal_levels <= 0) ||
-	    (val->intval > chg->thermal_levels))
+	if (val->intval < 0)
+		return -EINVAL;
+
+	if (chg->thermal_levels <= 0)
+		return -EINVAL;
+
+	if (val->intval > chg->thermal_levels)
 		return -EINVAL;
 
 	chg->system_temp_level = val->intval;
@@ -2838,16 +2843,6 @@ static int smblib_handle_usb_current(struct smb_charger *chg,
 					int usb_current)
 {
 	int rc = 0, rp_ua, typec_mode;
-
-#ifdef CONFIG_FORCE_FAST_CHARGE
-	if (force_fast_charge > 0 &&
-			chg->real_charger_type == POWER_SUPPLY_TYPE_USB) {
-		if (usb_current > 0 && usb_current < USBIN_500MA)
-			usb_current = USBIN_500MA;
-		else if (usb_current >= USBIN_500MA)
-			usb_current = USBIN_900MA;
-	}
-#endif
 
 	if (chg->real_charger_type == POWER_SUPPLY_TYPE_USB_FLOAT) {
 		if (usb_current == -ETIMEDOUT) {

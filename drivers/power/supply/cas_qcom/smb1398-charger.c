@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2019 The Linux Foundation. All rights reserved.
- * Copyright (C) 2021 XiaoMi, Inc.
  */
 
 #define pr_fmt(fmt) "SMB1398: %s: " fmt, __func__
@@ -284,16 +283,27 @@
 #define ADAPTER_VOICE_BOX		0x0d
 #define ADAPTER_XIAOMI_PD_45W	0x0e
 #define ADAPTER_XIAOMI_PD_60W   0x0f
+#define ADAPTER_XIAOMI_PD_100W   0x10
 #define WLDC_XIAOMI_20W_IOUT_MAX_UA	1000000
 #define WLDC_XIAOMI_30W_IOUT_MAX_UA	1500000
 #define WLDC_XIAOMI_40W_IOUT_MAX_UA	2000000
 
+#ifdef CONFIG_FACTORY_BUILD
+#define WLDC_XIAOMI_50W_IOUT_MAX_UA	2260000
+#else
 #define WLDC_XIAOMI_50W_IOUT_MAX_UA	2500000
+#endif
 
 #define WLS_MAIN_CHAREGER_ICL_UA 200000
+#ifdef CONFIG_FACTORY_BUILD
+#define WLS_MAIN_START_ILIM_UA 1300000
+#define WLS_MAIN_START_ILIM_THRESHOLD_UA 1100000
+#define WLS_MAIN_START_ILIM_CNT 10
+#else
 #define WLS_MAIN_START_ILIM_UA 800000
 #define WLS_MAIN_START_ILIM_THRESHOLD_UA 600000
 #define WLS_MAIN_START_ILIM_CNT 20
+#endif
 
 #define MAX_MONITOR_CYCLE_CNT 70
 #define MAX_RX_TEMPERATRUE 90
@@ -2226,7 +2236,7 @@ static irqreturn_t default_irq_handler(int irq, void *data)
 
 			if (strcmp(smb_irqs[i].name, "div2-irev") == 0) {
 				cancel_delayed_work(&chip->irev_process_work);
-				schedule_delayed_work(&chip->irev_process_work, msecs_to_jiffies(200));
+				queue_delayed_work(system_power_efficient_wq, &chip->irev_process_work, msecs_to_jiffies(200));
 			}
 		}
 	}
@@ -2385,7 +2395,8 @@ static int smb1398_get_wls_charging_icl(struct smb1398_chip *chip, int *effectiv
 			|| (tx_adapter_type == ADAPTER_VOICE_BOX)) {
 		*effectiveIcl = WLDC_XIAOMI_30W_IOUT_MAX_UA;
 	} else if (tx_adapter_type == ADAPTER_XIAOMI_PD_45W ||
-			tx_adapter_type == ADAPTER_XIAOMI_PD_60W) {
+			tx_adapter_type == ADAPTER_XIAOMI_PD_60W ||
+			tx_adapter_type == ADAPTER_XIAOMI_PD_100W) {
 		*effectiveIcl = WLDC_XIAOMI_50W_IOUT_MAX_UA;
 	} else {
 		dev_err(chip->dev, "Get Main tx_adapter_type failed, tx_adapter_type=%d\n",
@@ -2572,7 +2583,7 @@ static void smb1398_cp_close_work(struct work_struct *work)
 	/* disable 50w monitor work */
 	chip->max_power_cnt = MAX_MONITOR_CYCLE_CNT;
 	cancel_delayed_work_sync(&chip->high_power_monitor_work);
-	schedule_delayed_work(&chip->stop_rx_ocp_work, msecs_to_jiffies(0));
+	queue_delayed_work(system_power_efficient_wq, &chip->stop_rx_ocp_work, msecs_to_jiffies(0));
 	vote(chip->div2_cp_ilim_votable, HIGH_POWER_VOTER, false, 0);
 }
 
@@ -2657,14 +2668,16 @@ static void smb1398_isns_process_work(struct work_struct *work)
 				if (chip->isns_cnt++ >= WLS_MAIN_START_ILIM_CNT) {
 					vote(chip->div2_cp_ilim_votable, WIRELESS_CP_OPEN_VOTER, false, 0);
 					smb1398_charge_get_wireless_adapter_type(chip, &tx_adapter_type);
-					if (tx_adapter_type == ADAPTER_XIAOMI_PD_45W ||tx_adapter_type == ADAPTER_XIAOMI_PD_60W) {
+					if (tx_adapter_type == ADAPTER_XIAOMI_PD_45W ||
+							tx_adapter_type == ADAPTER_XIAOMI_PD_60W ||
+							tx_adapter_type == ADAPTER_XIAOMI_PD_100W) {
 						chip->max_power_cnt = 0;
 						if (!chip->rx_ocp_disable_votable)
 							chip->rx_ocp_disable_votable = find_votable("IDTP_OCP_DISABLE");
 						if (chip->rx_ocp_disable_votable)
 							vote(chip->rx_ocp_disable_votable, HIGH_POWER_VOTER, true, 0);
 
-						schedule_delayed_work(&chip->high_power_monitor_work, msecs_to_jiffies(0));
+						queue_delayed_work(system_power_efficient_wq, &chip->high_power_monitor_work, msecs_to_jiffies(0));
 					}
 				}
 			}
@@ -2780,9 +2793,9 @@ static void smb1398_high_power_monitor_work(struct work_struct *work)
 	if (chip->max_power_cnt++ >= MAX_MONITOR_CYCLE_CNT || temp_high || ilim_changed) {
 		/* set 40w icl, break work */
 		vote(chip->div2_cp_ilim_votable, HIGH_POWER_VOTER, true, WLDC_XIAOMI_40W_IOUT_MAX_UA - WLS_MAIN_CHAREGER_ICL_UA);
-		schedule_delayed_work(&chip->stop_rx_ocp_work, msecs_to_jiffies(5000));
+		queue_delayed_work(system_power_efficient_wq, &chip->stop_rx_ocp_work, msecs_to_jiffies(5000));
 	} else {
-		schedule_delayed_work(&chip->high_power_monitor_work, msecs_to_jiffies(1000));
+		queue_delayed_work(system_power_efficient_wq, &chip->high_power_monitor_work, msecs_to_jiffies(1000));
 	}
 }
 static void smb1398_irev_process_work(struct work_struct *work)

@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2017-2020 The Linux Foundation. All rights reserved.
- * Copyright (C) 2021 XiaoMi, Inc.
  */
 
 #define pr_fmt(fmt) "QCOM-BATT: %s: " fmt, __func__
@@ -1632,7 +1631,7 @@ static int pl_awake_vote_callback(struct votable *votable,
 	struct pl_data *chip = data;
 
 	if (awake)
-		__pm_wakeup_event(chip->pl_ws, 500);
+		__pm_stay_awake(chip->pl_ws);
 	else
 		__pm_relax(chip->pl_ws);
 
@@ -1979,7 +1978,6 @@ static void pl_config_init(struct pl_data *chip, int smb_version)
 	}
 }
 
-#ifdef CONFIG_DEBUG_FS
 static void qcom_batt_create_debugfs(struct pl_data *chip)
 {
 	struct dentry *entry;
@@ -1997,7 +1995,6 @@ static void qcom_batt_create_debugfs(struct pl_data *chip)
 		pr_err("Couldn't create force_dc_psy_update file rc=%ld\n",
 			(long)entry);
 }
-#endif
 
 #define DEFAULT_RESTRICTED_CURRENT_UA	1000000
 int qcom_batt_init(struct charger_param *chg_param)
@@ -2020,9 +2017,7 @@ int qcom_batt_init(struct charger_param *chg_param)
 	if (!chip)
 		return -ENOMEM;
 
-#ifdef CONFIG_DEBUG_FS
 	qcom_batt_create_debugfs(chip);
-#endif
 
 	chip->slave_pct = 50;
 	chip->chg_param = chg_param;
