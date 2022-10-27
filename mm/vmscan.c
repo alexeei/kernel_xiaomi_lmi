@@ -2919,7 +2919,7 @@ static bool should_skip_mm(struct mm_struct *mm, struct lru_gen_mm_walk *walk)
 	if (size < MIN_LRU_BATCH)
 		return true;
 
-	if (test_bit(MMF_OOM_REAP_QUEUED, &mm->flags))
+	if (mm_is_oom_victim(mm))
 		return true;
 
 	return !mmget_not_zero(mm);
@@ -3627,8 +3627,14 @@ restart:
 
 		walk_pmd_range(&val, addr, next, args);
 
+		if (mm_is_oom_victim(args->mm))
+			return 1;
 
-		if (walk->batched >= MAX_LRU_BATCH) {
+		/* a racy check to curtail the waiting time */
+		if (wq_has_sleeper(&walk->lruvec->mm_state.wait))
+			return 1;
+
+		if (need_resched() || walk->batched >= MAX_LRU_BATCH) {
 			end = (addr | ~PUD_MASK) + 1;
 			goto done;
 		}
@@ -4064,11 +4070,7 @@ static void lru_gen_age_node(struct pglist_data *pgdat, struct scan_control *sc)
 	 * younger than min_ttl. However, another possibility is all memcgs are
 	 * either below min or empty.
 	 */
-
-#ifdef CONFIG_ANDROID_SIMPLE_LMK
-	simple_lmk_trigger();
-#else
-	if (!sc->order && mutex_trylock(&oom_lock)) {
+	if (mutex_trylock(&oom_lock)) {
 		struct oom_control oc = {
 			.gfp_mask = sc->gfp_mask,
 		};
@@ -4544,6 +4546,11 @@ static int evict_pages(struct lruvec *lruvec, struct scan_control *sc, int swapp
 }
 
 
+/*
+ * For future optimizations:
+ * 1. Defer try_to_inc_max_seq() to workqueues to reduce latency for memcg
+ *    reclaim.
+ */
 static unsigned long get_nr_to_scan(struct lruvec *lruvec, struct scan_control *sc,
 				    bool can_swap, unsigned long reclaimed, bool *need_aging)
 {
@@ -4553,29 +4560,10 @@ static unsigned long get_nr_to_scan(struct lruvec *lruvec, struct scan_control *
 	DEFINE_MAX_SEQ(lruvec);
 	DEFINE_MIN_SEQ(lruvec);
 
-
-	nr_to_scan = get_nr_evictable(lruvec, max_seq, min_seq, can_swap, need_aging);
-	if (!nr_to_scan)
+	if (fatal_signal_pending(current)) {
+		sc->nr_reclaimed += MIN_LRU_BATCH;
 		return 0;
-
-	/* adjust priority if memcg is offline or the target is met */
-	if (!mem_cgroup_online(memcg))
-		priority = 0;
-	else if (sc->nr_reclaimed - reclaimed >= sc->nr_to_reclaim)
-		priority = DEF_PRIORITY;
-	else
-		priority = sc->priority;
-
-	nr_to_scan >>= priority;
-	if (!nr_to_scan)
-		return 0;
-
-	if (!*need_aging)
-		return nr_to_scan;
-
-	/* skip the aging path at the default priority */
-	if (priority == DEF_PRIORITY)
-		goto done;
+	}
 
 	nr_to_scan = get_nr_evictable(lruvec, max_seq, min_seq, can_swap, need_aging);
 	if (!nr_to_scan)
