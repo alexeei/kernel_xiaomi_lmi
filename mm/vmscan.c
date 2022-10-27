@@ -3298,6 +3298,69 @@ static bool get_next_vma(struct mm_walk *walk, unsigned long mask, unsigned long
 	return false;
 }
 
+
+static unsigned long get_pte_pfn(pte_t pte, struct vm_area_struct *vma, unsigned long addr)
+{
+	unsigned long pfn = pte_pfn(pte);
+
+	VM_WARN_ON_ONCE(addr < vma->vm_start || addr >= vma->vm_end);
+
+	if (!pte_present(pte) || is_zero_pfn(pfn))
+		return -1;
+
+	if (WARN_ON_ONCE(pte_devmap(pte) || pte_special(pte)))
+		return -1;
+
+	if (WARN_ON_ONCE(!pfn_valid(pfn)))
+		return -1;
+
+	return pfn;
+}
+
+#if defined(CONFIG_TRANSPARENT_HUGEPAGE) || defined(CONFIG_ARCH_HAS_NONLEAF_PMD_YOUNG)
+static unsigned long get_pmd_pfn(pmd_t pmd, struct vm_area_struct *vma, unsigned long addr)
+{
+	unsigned long pfn = pmd_pfn(pmd);
+
+	VM_WARN_ON_ONCE(addr < vma->vm_start || addr >= vma->vm_end);
+
+	if (!pmd_present(pmd) || is_huge_zero_pmd(pmd))
+		return -1;
+
+	if (WARN_ON_ONCE(pmd_devmap(pmd)))
+		return -1;
+
+	if (WARN_ON_ONCE(!pfn_valid(pfn)))
+		return -1;
+
+	return pfn;
+}
+#endif
+
+static struct page *get_pfn_page(unsigned long pfn, struct mem_cgroup *memcg,
+				   struct pglist_data *pgdat, bool can_swap)
+{
+	struct page *page;
+
+	/* try to avoid unnecessary memory loads */
+	if (pfn < pgdat->node_start_pfn || pfn >= pgdat_end_pfn(pgdat))
+		return NULL;
+
+	page = pfn_to_page(pfn);
+	if (page_to_nid(page) != pgdat->node_id)
+		return NULL;
+
+	if (page_memcg_rcu(page) != memcg)
+		return NULL;
+
+	/* file VMAs can contain anon pages from COW */
+	if (!page_is_file_cache(page) && !can_swap)
+		return NULL;
+
+	return page;
+}
+
+
 static bool suitable_to_scan(int total, int young)
 {
 	int n = clamp_t(int, cache_line_size() / sizeof(pte_t), 2, 8);
@@ -4202,8 +4265,17 @@ static bool isolate_page(struct lruvec *lruvec, struct page *page, struct scan_c
 		return false;
 	}
 
+	/* see the comment on MAX_NR_TIERS */
+	if (!PageReferenced(page))
+		set_mask_bits(&page->flags, LRU_REFS_MASK | LRU_REFS_FLAGS, 0);
+
+	/* for shrink_page_list() */
+	ClearPageReclaim(page);
+	ClearPageReferenced(page);
+
+
 	success = lru_gen_del_page(lruvec, page, true);
-	VM_BUG_ON_PAGE(!success, page);
+	VM_WARN_ON_ONCE_PAGE(!success, page);
 
 	return true;
 }
@@ -4407,13 +4479,13 @@ static int evict_pages(struct lruvec *lruvec, struct scan_control *sc, int swapp
 
 	reclaimed = shrink_page_list(&list, pgdat, sc, 0, NULL, false);
 
-	/*
-	 * To avoid livelock, don't add rejected pages back to the same lists
-	 * they were isolated from. See lru_gen_add_page().
-	 */
 	list_for_each_entry(page, &list, lru) {
-		ClearPageReferenced(page);
-		ClearPageWorkingset(page);
+
+		/* restore LRU_REFS_FLAGS cleared by isolate_page() */
+		if (PageWorkingset(page))
+			SetPageReferenced(page);
+
+		/* don't add rejected pages to the oldest generation */
 
 		if (PageReclaim(page) && (PageDirty(page) || PageWriteback(page)))
 			ClearPageActive(page);
@@ -4875,14 +4947,20 @@ static void lru_gen_seq_show_full(struct seq_file *m, struct lruvec *lruvec,
 
 	seq_puts(m, "                      ");
 	for (i = 0; i < NR_MM_STATS; i++) {
-		if (seq == max_seq && NR_HIST_GENS == 1)
-			seq_printf(m, " %10lu%c", READ_ONCE(lruvec->mm_state.stats[hist][i]),
-				   toupper(MM_STAT_CODES[i]));
-		else if (seq != max_seq && NR_HIST_GENS > 1)
-			seq_printf(m, " %10lu%c", READ_ONCE(lruvec->mm_state.stats[hist][i]),
-				   MM_STAT_CODES[i]);
-		else
-			seq_puts(m, "          0 ");
+
+		const char *s = "      ";
+		unsigned long n = 0;
+
+		if (seq == max_seq && NR_HIST_GENS == 1) {
+			s = "LOYNFA";
+			n = READ_ONCE(lruvec->mm_state.stats[hist][i]);
+		} else if (seq != max_seq && NR_HIST_GENS > 1) {
+			s = "loynfa";
+			n = READ_ONCE(lruvec->mm_state.stats[hist][i]);
+		}
+
+		seq_printf(m, " %10lu%c", n, s[i]);
+
 	}
 	seq_putc(m, '\n');
 }
@@ -5063,17 +5141,18 @@ static ssize_t lru_gen_seq_write(struct file *file, const char __user *src,
 		return -EFAULT;
 	}
 
+
+	set_task_reclaim_state(current, &sc.reclaim_state);
+	flags = memalloc_noreclaim_save();
+	blk_start_plug(&plug);
+	if (!set_mm_walk(NULL)) {
+		err = -ENOMEM;
+		goto done;
+	}
+
 	next = buf;
 	next[len] = '\0';
 
-	rs.mm_walk = alloc_mm_walk();
-	if (!rs.mm_walk) {
-		kvfree(buf);
-		return -ENOMEM;
-	}
-
-	current->reclaim_state = &rs;
-	flags = memalloc_noreclaim_save();
 
 	while ((cur = strsep(&next, ",;\n"))) {
 		int n;
@@ -5101,10 +5180,14 @@ static ssize_t lru_gen_seq_write(struct file *file, const char __user *src,
 			break;
 	}
 
+done:
+	clear_mm_walk();
+	blk_finish_plug(&plug);
+
 	memalloc_noreclaim_restore(flags);
 	current->reclaim_state = NULL;
 
-	free_mm_walk(rs.mm_walk);
+
 	kvfree(buf);
 
 	return err ? : len;
