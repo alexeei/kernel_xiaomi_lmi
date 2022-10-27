@@ -3657,7 +3657,15 @@ restart:
 
 		walk_pmd_range(&val, addr, next, walk);
 
-		if (priv->batched >= MAX_LRU_BATCH) {
+
+		if (mm_is_oom_victim(args->mm))
+			return 1;
+
+		/* a racy check to curtail the waiting time */
+		if (wq_has_sleeper(&walk->lruvec->mm_state.wait))
+			return 1;
+
+		if (need_resched() || walk->batched >= MAX_LRU_BATCH) {
 			end = (addr | ~PUD_MASK) + 1;
 			goto done;
 		}
@@ -3882,7 +3890,7 @@ static bool try_to_inc_max_seq(struct lruvec *lruvec, unsigned long max_seq,
 	free_mm_walk(walk);
 done:
 	if (!success) {
-		if (!current_is_kswapd() && !sc->priority)
+		if (sc->priority < DEF_PRIORITY - 2)
 			wait_event_killable(lruvec->mm_state.wait,
 					    max_seq < READ_ONCE(lrugen->max_seq));
 
@@ -4034,10 +4042,14 @@ static void lru_gen_age_node(struct pglist_data *pgdat, struct scan_control *sc)
 
 	current->reclaim_state->mm_walk = NULL;
 
+	/* check the order to exclude compaction-induced reclaim */
+	if (success || !min_ttl || sc->order)
+		return;
+
 	/*
 	 * The main goal is to OOM kill if every generation from all memcgs is
-	 * younger than min_ttl. However, another theoretical possibility is all
-	 * memcgs are either below min or empty.
+	 * younger than min_ttl. However, another possibility is all memcgs are
+	 * either below min or empty.
 	 */
 
 #ifdef CONFIG_ANDROID_SIMPLE_LMK
@@ -4519,14 +4531,25 @@ static int evict_pages(struct lruvec *lruvec, struct scan_control *sc, int swapp
 	return scanned;
 }
 
-static long get_nr_to_scan(struct lruvec *lruvec, struct scan_control *sc, bool can_swap,
-			   unsigned long reclaimed, bool *need_aging)
+
+/*
+ * For future optimizations:
+ * 1. Defer try_to_inc_max_seq() to workqueues to reduce latency for memcg
+ *    reclaim.
+ */
+static unsigned long get_nr_to_scan(struct lruvec *lruvec, struct scan_control *sc,
+				    bool can_swap, unsigned long reclaimed, bool *need_aging)
 {
 	int priority;
 	long nr_to_scan;
 	struct mem_cgroup *memcg = lruvec_memcg(lruvec);
 	DEFINE_MAX_SEQ(lruvec);
 	DEFINE_MIN_SEQ(lruvec);
+
+	if (fatal_signal_pending(current)) {
+		sc->nr_reclaimed += MIN_LRU_BATCH;
+		return 0;
+	}
 
 	nr_to_scan = get_nr_evictable(lruvec, max_seq, min_seq, can_swap, need_aging);
 	if (!nr_to_scan)
@@ -5307,8 +5330,8 @@ static void shrink_node_memcg(struct pglist_data *pgdat, struct mem_cgroup *memc
 	enum lru_list lru;
 	unsigned long nr_reclaimed = 0;
 	unsigned long nr_to_reclaim = sc->nr_to_reclaim;
+	bool proportional_reclaim;
 	struct blk_plug plug;
-	bool scan_adjusted;
 
 	if (lru_gen_enabled()) {
 		lru_gen_shrink_lruvec(lruvec, sc);
@@ -5331,8 +5354,8 @@ static void shrink_node_memcg(struct pglist_data *pgdat, struct mem_cgroup *memc
 	 * abort proportional reclaim if either the file or anon lru has already
 	 * dropped to zero at the first pass.
 	 */
-	scan_adjusted = (global_reclaim(sc) && !current_is_kswapd() &&
-			 sc->priority == DEF_PRIORITY);
+	proportional_reclaim = (global_reclaim(sc) && !current_is_kswapd() &&
+				sc->priority == DEF_PRIORITY);
 
 	blk_start_plug(&plug);
 	while (nr[LRU_INACTIVE_ANON] || nr[LRU_ACTIVE_FILE] ||
@@ -5352,7 +5375,7 @@ static void shrink_node_memcg(struct pglist_data *pgdat, struct mem_cgroup *memc
 
 		cond_resched();
 
-		if (nr_reclaimed < nr_to_reclaim || scan_adjusted)
+		if (nr_reclaimed < nr_to_reclaim || proportional_reclaim)
 			continue;
 
 		/*
@@ -5403,8 +5426,6 @@ static void shrink_node_memcg(struct pglist_data *pgdat, struct mem_cgroup *memc
 		nr_scanned = targets[lru] - nr[lru];
 		nr[lru] = targets[lru] * (100 - percentage) / 100;
 		nr[lru] -= min(nr[lru], nr_scanned);
-
-		scan_adjusted = true;
 	}
 	blk_finish_plug(&plug);
 	sc->nr_reclaimed += nr_reclaimed;
