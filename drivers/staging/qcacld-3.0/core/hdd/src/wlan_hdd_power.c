@@ -281,12 +281,8 @@ static void __wlan_hdd_ipv6_changed(struct net_device *net_dev,
 
 	hdd_ctx = WLAN_HDD_GET_CTX(adapter);
 	errno = wlan_hdd_validate_context(hdd_ctx);
-	if (0 != errno) {
-		if (pld_is_low_power_mode(hdd_ctx->parent_dev))
-			hdd_debug("low power mode (Deep Sleep/Hibernate)");
-		else
-			return errno;
-	}
+	if (errno)
+		goto exit;
 
 	/* Only need to be notified for ipv6_add_addr
 	 * No need for ipv6_del_addr or addrconf_ifdown
@@ -589,12 +585,8 @@ static void __hdd_ipv6_notifier_work_queue(struct hdd_adapter *adapter)
 
 	hdd_ctx = WLAN_HDD_GET_CTX(adapter);
 	errno = wlan_hdd_validate_context(hdd_ctx);
-	if (0 != errno) {
-		if (pld_is_low_power_mode(hdd_ctx->parent_dev))
-			hdd_debug("low power mode (Deep Sleep/Hibernate)");
-		else
-			return errno;
-	}
+	if (errno)
+		goto exit;
 
 	hdd_enable_ns_offload(adapter, pmo_ipv6_change_notify);
 

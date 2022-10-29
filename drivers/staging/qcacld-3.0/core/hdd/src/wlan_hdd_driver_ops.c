@@ -1100,12 +1100,8 @@ static int __wlan_hdd_bus_suspend(struct wow_enable_params wow_params)
 	hdd_ctx = cds_get_context(QDF_MODULE_ID_HDD);
 
 	err = wlan_hdd_validate_context(hdd_ctx);
-	if (0 != err) {
-		if (pld_is_low_power_mode(hdd_ctx->parent_dev))
-			hdd_debug("low power mode (Deep Sleep/Hibernate)");
-		else
-			return err;
-	}
+	if (err)
+		return err;
 
 	/* Wait for the stop module if already in progress */
 	hdd_psoc_idle_timer_stop(hdd_ctx);
@@ -1510,12 +1506,8 @@ static int wlan_hdd_runtime_suspend(struct device *dev)
 
 	hdd_ctx = cds_get_context(QDF_MODULE_ID_HDD);
 	err = wlan_hdd_validate_context(hdd_ctx);
-	if (0 != errno) {
-		if (pld_is_low_power_mode(hdd_ctx->parent_dev))
-			hdd_debug("low power mode (Deep Sleep/Hibernate)");
-		else
-			return errno;
-	}
+	if (err)
+		return err;
 
 	if (hdd_ctx->driver_status != DRIVER_MODULES_ENABLED) {
 		hdd_debug("Driver module closed skipping runtime suspend");
