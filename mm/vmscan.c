@@ -4272,14 +4272,6 @@ static bool isolate_page(struct lruvec *lruvec, struct page *page, struct scan_c
 		return false;
 	}
 
-	/* see the comment on MAX_NR_TIERS */
-	if (!PageReferenced(page))
-		set_mask_bits(&page->flags, LRU_REFS_MASK | LRU_REFS_FLAGS, 0);
-
-	/* for shrink_page_list() */
-	ClearPageReclaim(page);
-	ClearPageReferenced(page);
-
 
 	success = lru_gen_del_page(lruvec, page, true);
 	VM_WARN_ON_ONCE_PAGE(!success, page);
