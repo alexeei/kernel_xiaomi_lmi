@@ -1774,7 +1774,7 @@ static struct ctl_table vm_table[] = {
 		.mode		= 0444,
 		.proc_handler	= proc_dointvec_minmax,
 		.extra1		= &zero,
-		.extra2		= &max_swappiness,
+		.extra2		= &two_hundred,
 	},
 	{
 		.procname       = "want_old_faultaround_pte",
