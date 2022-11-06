@@ -750,7 +750,7 @@ static void __cold _credit_init_bits(size_t bits)
  * the above entropy accumulation routines:
  *
  *	void add_device_randomness(const void *buf, size_t len);
- *	void add_hwgenerator_randomness(const void *buf, size_t len, size_t entropy);
+ *	void add_hwgenerator_randomness(const void *buf, size_t len, size_t entropy, bool sleep_after);
  *	void add_bootloader_randomness(const void *buf, size_t len);
  *	void add_interrupt_randomness(int irq);
  *	void add_input_randomness(unsigned int type, unsigned int code, unsigned int value);
@@ -867,11 +867,15 @@ void add_device_randomness(const void *buf, size_t len)
 EXPORT_SYMBOL(add_device_randomness);
 
 /*
- * Interface for in-kernel drivers of true hardware RNGs.
- * Those devices may produce endless random bits and will be throttled
- * when our pool is full.
+ * Interface for in-kernel drivers of true hardware RNGs. Those devices
+ * may produce endless random bits, so this function will sleep for
+ * some amount of time after, if the sleep_after parameter is true.
  */
+<<<<<<< HEAD
 void add_hwgenerator_randomness(const void *buf, size_t len, size_t entropy)
+=======
+void add_hwgenerator_randomness(const char *buf, size_t len, size_t entropy, bool sleep_after)
+>>>>>>> f015f4ccc3f6c (hw_random: use add_hwgenerator_randomness() for early entropy)
 {
 	mix_pool_bytes(buf, len);
 	credit_init_bits(entropy);
@@ -880,9 +884,15 @@ void add_hwgenerator_randomness(const void *buf, size_t len, size_t entropy)
 	 * Throttle writing to once every CRNG_RESEED_INTERVAL, unless
 	 * we're not yet initialized.
 	 */
+<<<<<<< HEAD
 	if ((current->flags & PF_KTHREAD) &&
 	    !kthread_should_stop() && crng_ready())
 		schedule_timeout_interruptible(CRNG_RESEED_INTERVAL);
+=======
+	if ((current->flags & PF_KTHREAD) && sleep_after &&
+	    !kthread_should_stop() && (crng_ready() || !entropy))
+		schedule_timeout_interruptible(crng_reseed_interval());
+>>>>>>> f015f4ccc3f6c (hw_random: use add_hwgenerator_randomness() for early entropy)
 }
 EXPORT_SYMBOL_GPL(add_hwgenerator_randomness);
 
