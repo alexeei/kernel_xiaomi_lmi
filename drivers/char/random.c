@@ -276,27 +276,6 @@ static void crng_fast_key_erasure(u8 key[CHACHA20_KEY_SIZE],
 }
 
 /*
-
- * Return the interval until the next reseeding, which is normally
- * CRNG_RESEED_INTERVAL, but during early boot, it is at an interval
- * proportional to the uptime.
- */
-static unsigned int crng_reseed_interval(void)
-{
-	static bool early_boot = true;
-
-	if (unlikely(READ_ONCE(early_boot))) {
-		time64_t uptime = ktime_get_seconds();
-		if (uptime >= CRNG_RESEED_INTERVAL / HZ * 2)
-			WRITE_ONCE(early_boot, false);
-		else
-			return max_t(unsigned int, CRNG_RESEED_START_INTERVAL,
-				     (unsigned int)uptime / 2 * HZ);
-	}
-	return CRNG_RESEED_INTERVAL;
-}
-
-/*
  * This function returns a ChaCha state that you may use for generating
  * random data. It also returns up to 32 bytes on its own of random data
  * that may be used; random_data_len may not be greater than 32.
@@ -330,13 +309,6 @@ static void crng_make_state(u32 chacha_state[CHACHA20_BLOCK_SIZE / sizeof(u32)],
 		if (!ready)
 			return;
 	}
-
-	/*
-	 * If the base_crng is old enough, we reseed, which in turn bumps the
-	 * generation counter that we check below.
-	 */
-	if (unlikely(time_is_before_jiffies(READ_ONCE(base_crng.birth) + crng_reseed_interval())))
-		crng_reseed();
 
 	local_irq_save(flags);
 	crng = raw_cpu_ptr(&crngs);
@@ -664,7 +636,7 @@ static void __cold _credit_init_bits(size_t bits)
 	} while (cmpxchg(&input_pool.init_bits, orig, new) != orig);
 
 	if (orig < POOL_READY_BITS && new >= POOL_READY_BITS) {
-		crng_reseed(); /* Sets crng_init to CRNG_READY under base_crng.lock. */
+		crng_reseed(NULL); /* Sets crng_init to CRNG_READY under base_crng.lock. */
 		wake_up_interruptible(&crng_init_wait);
 		kill_fasync(&fasync, SIGIO, POLL_IN);
 		pr_notice("crng init done\n");
