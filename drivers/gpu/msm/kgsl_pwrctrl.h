@@ -54,6 +54,14 @@ enum kgsl_pwrctrl_timer_type {
 };
 
 /*
+ * The effective duration of qos request in usecs at queue time.
+ * After timeout, qos request is cancelled automatically.
+ * Kept 58ms default, inline with default GPU idle time.
+ */
+
+#define KGSL_L2PC_QUEUE_TIMEOUT	(58 * 1000)
+
+/*
  * States for thermal cycling.  _DISABLE means that no cycling has been
  * requested.  _ENABLE means that cycling has been requested, but GPU
  * DCVS is currently recommending running at a lower frequency than the
