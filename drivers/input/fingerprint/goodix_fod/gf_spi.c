@@ -833,14 +833,13 @@ static int gf_probe(struct platform_device *pdev)
 	spi_clock_set(gf_dev, 1000000);
 #endif
 	gf_dev->irq = gf_irq_num(gf_dev);
-	fp_wakelock = wakeup_source_register(&(gf_dev->spi->dev),
-					     "fp_wakelock");
+	/*fp_wakelock = wakeup_source_create("fp_wakelock");*/
+	fp_wakelock =
+		wakeup_source_register(&(gf_dev->spi->dev), "fp_wakelock");
 	if (fp_wakelock == NULL)
 		goto error_wakelock;
-
 	pr_debug("version V%d.%d.%02d\n", VER_MAJOR, VER_MINOR, PATCH_LEVEL);
 	return status;
-
 
 error_wakelock:
 	pr_debug("create fp wakelock failed.\n");
