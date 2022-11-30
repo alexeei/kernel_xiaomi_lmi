@@ -55,16 +55,8 @@
 #include <linux/sched/isolation.h>
 #include <linux/uio.h>
 #include <crypto/chacha.h>
-
-#include <linux/uaccess.h>
-
-#include <linux/siphash.h>
-#include <linux/sched/isolation.h>
-#include <linux/uio.h>
-
 #include <crypto/blake2s.h>
 #include <asm/processor.h>
-
 #include <asm/irq.h>
 #include <asm/irq_regs.h>
 #include <asm/io.h>
@@ -244,7 +236,6 @@ static void crng_reseed(struct work_struct *work)
 	memzero_explicit(key, sizeof(key));
 }
 
-
 /*
  * This generates a ChaCha block using the provided key, and then
  * immediately overwites that key with half the block. It returns
@@ -382,7 +373,7 @@ static void _get_random_bytes(void *buf, size_t len)
  * wait_for_random_bytes() should be called and return 0 at least once
  * at any point prior.
  */
-void get_random_bytes(void *buf, size_t len)
+void get_random_bytes(void *buf, int len)
 {
 	warn_unseeded_randomness();
 	_get_random_bytes(buf, len);
@@ -1119,29 +1110,30 @@ static void __cold entropy_timer(struct timer_list *timer)
 static void __cold try_to_generate_entropy(void)
 {
 	enum { NUM_TRIAL_SAMPLES = 8192, MAX_SAMPLES_PER_BIT = HZ / 15 };
-	struct entropy_timer_state stack;
+	u8 stack_bytes[sizeof(struct entropy_timer_state) + SMP_CACHE_BYTES - 1];
+	struct entropy_timer_state *stack = PTR_ALIGN((void *)stack_bytes, SMP_CACHE_BYTES);
 	unsigned int i, num_different = 0;
 	unsigned long last = random_get_entropy();
 	int cpu = -1;
 
 	for (i = 0; i < NUM_TRIAL_SAMPLES - 1; ++i) {
-		stack.entropy = random_get_entropy();
-		if (stack.entropy != last)
+		stack->entropy = random_get_entropy();
+		if (stack->entropy != last)
 			++num_different;
-		last = stack.entropy;
+		last = stack->entropy;
 	}
-	stack.samples_per_bit = DIV_ROUND_UP(NUM_TRIAL_SAMPLES, num_different + 1);
-	if (stack.samples_per_bit > MAX_SAMPLES_PER_BIT)
+	stack->samples_per_bit = DIV_ROUND_UP(NUM_TRIAL_SAMPLES, num_different + 1);
+	if (stack->samples_per_bit > MAX_SAMPLES_PER_BIT)
 		return;
 
-	atomic_set(&stack.samples, 0);
-	timer_setup_on_stack(&stack.timer, entropy_timer, 0);
+	atomic_set(&stack->samples, 0);
+	timer_setup_on_stack(&stack->timer, entropy_timer, 0);
 	while (!crng_ready() && !signal_pending(current)) {
 		/*
 		 * Check !timer_pending() and then ensure that any previous callback has finished
 		 * executing by checking try_to_del_timer_sync(), before queueing the next one.
 		 */
-		if (!timer_pending(&stack.timer) && try_to_del_timer_sync(&stack.timer) >= 0) {
+		if (!timer_pending(&stack->timer) && try_to_del_timer_sync(&stack->timer) >= 0) {
 			struct cpumask timer_cpus;
 			unsigned int num_cpus;
 
@@ -1168,20 +1160,20 @@ static void __cold try_to_generate_entropy(void)
 			} while (cpu == smp_processor_id() && num_cpus > 1);
 
 			/* Expiring the timer at `jiffies` means it's the next tick. */
-			stack.timer.expires = jiffies;
+			stack->timer.expires = jiffies;
 
-			add_timer_on(&stack.timer, cpu);
+			add_timer_on(&stack->timer, cpu);
 
 			preempt_enable();
 		}
-		mix_pool_bytes(&stack.entropy, sizeof(stack.entropy));
+		mix_pool_bytes(&stack->entropy, sizeof(stack->entropy));
 		schedule();
-		stack.entropy = random_get_entropy();
+		stack->entropy = random_get_entropy();
 	}
-	mix_pool_bytes(&stack.entropy, sizeof(stack.entropy));
-	del_timer_sync(&stack.timer);
-	destroy_timer_on_stack(&stack.timer);
->>>>>>> 3ea2681e3b1a7 (random: spread out jitter callback to different CPUs)
+	mix_pool_bytes(&stack->entropy, sizeof(stack->entropy));
+
+	del_timer_sync(&stack->timer);
+	destroy_timer_on_stack(&stack->timer);
 }
 
 
@@ -1232,7 +1224,6 @@ SYSCALL_DEFINE3(getrandom, char __user *, ubuf, size_t, len, unsigned int, flags
 		if (unlikely(ret))
 			return ret;
 	}
-
 
 	ret = import_single_range(READ, ubuf, len, &iov, &iter);
 	if (unlikely(ret))
@@ -1501,4 +1492,3 @@ struct ctl_table random_table[] = {
 	{ }
 };
 #endif	/* CONFIG_SYSCTL */
-
