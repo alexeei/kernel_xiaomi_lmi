@@ -50,6 +50,8 @@
 #include <linux/printk.h>
 #include <linux/dax.h>
 #include <linux/psi.h>
+
+#include <linux/memory.h>
 #include <linux/pagevec.h>
 #include <linux/shmem_fs.h>
 #include <linux/ctype.h>
@@ -2241,12 +2243,8 @@ static void shrink_active_list(unsigned long nr_to_scan,
 
 		/* Referenced or rmap lock contention: rotate */
 		if (page_referenced(page, 0, sc->target_mem_cgroup,
-<<<<<<< HEAD
-				    &vm_flags) != 0) {
-			nr_rotated += hpage_nr_pages(page);
-=======
 				     &vm_flags) != 0) {
->>>>>>> dde2c85163fa6 (BACKPORT: mm: don't be stuck to rmap lock on reclaim path)
+
 			/*
 			 * Identify referenced, file-backed active pages and
 			 * give them one more trip around the active list. So
@@ -3678,7 +3676,8 @@ static void walk_mm(struct lruvec *lruvec, struct mm_struct *mm, struct lru_gen_
 		/* the caller might be holding the lock for write */
 		if (down_read_trylock(&mm->mmap_sem)) {
 
-			err = walk_page_range(mm, walk->next_addr, ULONG_MAX, &mm_walk_ops, walk);
+			err = walk_page_range(walk->next_addr, ULONG_MAX, &args);
+
 
 			up_read(&mm->mmap_sem);
 		}
