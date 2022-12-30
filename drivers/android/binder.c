@@ -200,14 +200,6 @@ static inline void binder_stats_created(enum binder_stat_types type)
 struct binder_transaction_log binder_transaction_log;
 struct binder_transaction_log binder_transaction_log_failed;
 
-static struct kmem_cache *binder_node_pool;
-static struct kmem_cache *binder_proc_pool;
-static struct kmem_cache *binder_ref_death_pool;
-static struct kmem_cache *binder_ref_pool;
-static struct kmem_cache *binder_thread_pool;
-static struct kmem_cache *binder_transaction_pool;
-static struct kmem_cache *binder_work_pool;
-
 static struct binder_transaction_log_entry *binder_transaction_log_add(
 	struct binder_transaction_log *log)
 {
@@ -6457,8 +6449,8 @@ static int __init binder_create_pools(void)
 	if (!binder_node_pool)
 		goto err_node_pool;
 
-	binder_proc_pool = KMEM_CACHE(binder_proc, SLAB_HWCACHE_ALIGN);
-	if (!binder_proc_pool)
+	binder_eproc_pool = KMEM_CACHE(binder_proc, SLAB_HWCACHE_ALIGN);
+	if (!binder_eproc_pool)
 		goto err_proc_pool;
 
 	binder_ref_death_pool = KMEM_CACHE(binder_ref_death, SLAB_HWCACHE_ALIGN);
@@ -6504,7 +6496,7 @@ err_thread_pool:
 err_ref_pool:
 	kmem_cache_destroy(binder_ref_death_pool);
 err_ref_death_pool:
-	kmem_cache_destroy(binder_proc_pool);
+	kmem_cache_destroy(binder_eproc_pool);
 err_proc_pool:
 	kmem_cache_destroy(binder_node_pool);
 err_node_pool:
@@ -6516,7 +6508,7 @@ static void __init binder_destroy_pools(void)
 {
 	binder_buffer_pool_destroy();
 	kmem_cache_destroy(binder_node_pool);
-	kmem_cache_destroy(binder_proc_pool);
+	kmem_cache_destroy(binder_eproc_pool);
 	kmem_cache_destroy(binder_ref_death_pool);
 	kmem_cache_destroy(binder_ref_pool);
 	kmem_cache_destroy(binder_thread_pool);
