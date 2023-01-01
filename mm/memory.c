@@ -4597,7 +4597,8 @@ static inline void mm_account_fault(struct pt_regs *regs,
  */
 vm_fault_t __handle_speculative_fault(struct mm_struct *mm,
 			       unsigned long address, unsigned int flags,
-			       struct vm_area_struct **vma)
+			       struct vm_area_struct **vma,
+				   struct pt_regs *regs)
 {
 	struct vm_fault vmf = {
 		.address = address,
