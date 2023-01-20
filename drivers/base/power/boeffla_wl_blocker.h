@@ -17,9 +17,10 @@
 
 #define BOEFFLA_WL_BLOCKER_VERSION	"1.2.0"
 
-#define LIST_WL_DEFAULT	"wlan;wlan_wow_wl;wlan_extscan_wl;netmgr_wl;NETLINK;IPA_WS;wlan_ipa;wlan_pno_wl;wcnss_filter_lock;[timerfd];IPA_CLIENT_APPS_LAN_CONS;IPA_CLIENT_APPS_WAN_CONS;rmnet_ipa%d;IPCRTR_lpass_rx;hal_bluetooth_lock;DIAG_WS;qcom_sap_wakelock;sensor_ind;wlan_rx_wake"
+#define LIST_WL_DEFAULT				"qcom_rx_wakelock;998000.qcom,qup_uart;bluetooth_timer;hal_bluetooth_lock;smp2p-sleepstate;wlan;wlan_pno_wl;fastcg_wake_lock;c440000.qcom,spmi:qcom,pm8150b@2:qcom,qpnp-smb5;bq_delt_soc_wake_lock;alarmtimer"
+
+#define LENGTH_LIST_WL				512
 #define LENGTH_LIST_WL_DEFAULT	 sizeof(LIST_WL_DEFAULT)
-#define LENGTH_LIST_WL		 255
 #define LENGTH_LIST_WL_SEARCH	 LENGTH_LIST_WL + LENGTH_LIST_WL_DEFAULT + 5
 
 extern void wakeup_source_deactivate(struct wakeup_source *ws);
