@@ -3717,7 +3717,7 @@ static int msm_geni_serial_runtime_suspend(struct device *dev)
 		goto exit_runtime_suspend;
 	}
 
-	if (port->wakeup_irq > 0) {
+	if (port->wakeup_irq > 0 && port->uport.state->port.tty) {
 		port->edge_count = 0;
 		enable_irq(port->wakeup_irq);
 	}
