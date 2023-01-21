@@ -2102,6 +2102,15 @@ static inline unsigned long sched_cpu_util(int cpu)
 }
 #endif
 
+#ifdef CONFIG_CPU_FREQ_GOV_SCHEDHORIZON
+unsigned long sched_cpu_util(int cpu);
+#else
+static inline unsigned long sched_cpu_util(int cpu)
+{
+	return 0;
+}
+#endif
+
 #ifdef CONFIG_RSEQ
 
 /*
