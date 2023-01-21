@@ -177,8 +177,6 @@ static ssize_t mem_sleep_store(struct kobject *kobj, struct kobj_attribute *attr
 
     
 	error = pm_autosleep_lock();
-	/* Don't allow userspace to select s2idle */
-	return n;
 	if (error)
 		return error;
 
