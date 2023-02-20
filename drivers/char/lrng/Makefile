@@ -9,6 +9,7 @@ obj-y				+= lrng_es_mgr.o lrng_aux.o \
 				   lrng_drng.o lrng_chacha20.o \
 				   lrng_interfaces.o lrng_es_aux.o
 
+
 obj-$(CONFIG_LRNG_IRQ)		+= lrng_es_irq.o
 obj-$(CONFIG_SYSCTL)		+= lrng_proc.o
 obj-$(CONFIG_NUMA)		+= lrng_numa.o
@@ -21,3 +22,11 @@ obj-$(CONFIG_LRNG_JENT)		+= lrng_es_jent.o
 obj-$(CONFIG_LRNG_HEALTH_TESTS)	+= lrng_health.o
 obj-$(CONFIG_LRNG_TESTING)	+= lrng_testing.o
 obj-$(CONFIG_LRNG_SELFTEST)	+= lrng_selftest.o
+
+obj-$(CONFIG_LRNG_SWITCH)		+= lrng_switch.o
+obj-$(CONFIG_LRNG_HASH_KCAPI)		+= lrng_hash_kcapi.o
+obj-$(CONFIG_LRNG_DRNG_CHACHA20)	+= lrng_drng_chacha20.o
+
+obj-$(CONFIG_LRNG_DRNG_KCAPI)		+= lrng_drng_kcapi.o
+obj-$(CONFIG_LRNG_DRNG_ATOMIC)		+= lrng_drng_atomic.o
+
