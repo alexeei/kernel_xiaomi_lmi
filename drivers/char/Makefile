@@ -3,11 +3,14 @@
 # Makefile for the kernel character device drivers.
 #
 
-obj-y				+= mem.o
+
 ifeq ($(CONFIG_LRNG),y)
   obj-y				+= lrng/
+  obj-y				+= mem.o
+  obj-$(CONFIG_RANDOM_DEFAULT_IMPL) += random.o
 else
   obj-y				+= random.o
+  obj-y				+= mem.o
 endif
 
 obj-$(CONFIG_TTY_PRINTK)	+= ttyprintk.o

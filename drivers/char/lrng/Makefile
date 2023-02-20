@@ -34,3 +34,9 @@ obj-$(CONFIG_LRNG_TIMER_COMMON)		+= lrng_es_timer_common.o
 obj-$(CONFIG_LRNG_IRQ)			+= lrng_es_irq.o
 obj-$(CONFIG_LRNG_KERNEL_RNG)		+= lrng_es_krng.o
 obj-$(CONFIG_LRNG_SCHED)		+= lrng_es_sched.o
+
+obj-$(CONFIG_LRNG_COMMON_DEV_IF)	+= lrng_interface_dev_common.o
+obj-$(CONFIG_LRNG_RANDOM_IF)		+= lrng_interface_random_user.o \
+					   lrng_interface_random_kernel.o \
+					   lrng_interface_aux.o
+
