@@ -3632,6 +3632,7 @@ exit_wakeup_unregister:
 		wakeup_source_unregister(dev_port->geni_wake);
 exit_geni_serial_probe:
 	IPC_LOG_MSG(dev_port->ipc_log_misc, "%s: ret:%d\n", __func__, ret);
+	wakeup_source_unregister(dev_port->geni_wake);
 	return ret;
 }
 
