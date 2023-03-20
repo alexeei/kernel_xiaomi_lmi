@@ -1155,7 +1155,7 @@ struct entropy_timer_state {
  *
  * So the re-arming always happens in the entropy loop itself.
  */
-static void __cold entropy_timer(struct timer_list *t)
+static void __cold entropy_timer(struct timer_list *timer)
 {
 
 	struct entropy_timer_state *state = container_of(timer, struct entropy_timer_state, timer);
