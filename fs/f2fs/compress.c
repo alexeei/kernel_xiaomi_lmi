@@ -222,6 +222,13 @@ static const struct f2fs_compress_ops f2fs_lzo_ops = {
 #ifdef CONFIG_F2FS_FS_LZ4
 static int lz4_init_compress_ctx(struct compress_ctx *cc)
 {
+
+    unsigned int size = LZ4_MEM_COMPRESS;
+
+#ifdef CONFIG_F2FS_FS_LZ4HC
+	if (F2FS_I(cc->inode)->i_compress_flag >> COMPRESS_LEVEL_OFFSET)
+		size = LZ4HC_MEM_COMPRESS;
+#endif
 	cc->private = f2fs_kvmalloc(F2FS_I_SB(cc->inode),
 				LZ4_MEM_COMPRESS, GFP_NOFS);
 	if (!cc->private)
@@ -241,6 +248,27 @@ static void lz4_destroy_compress_ctx(struct compress_ctx *cc)
 	kvfree(cc->private);
 	cc->private = NULL;
 }
+
+#ifdef CONFIG_F2FS_FS_LZ4HC
+static int lz4hc_compress_pages(struct compress_ctx *cc)
+{
+	unsigned char level = F2FS_I(cc->inode)->i_compress_flag >>
+						COMPRESS_LEVEL_OFFSET;
+	int len;
+
+	if (level)
+		len = LZ4_compress_HC(cc->rbuf, cc->cbuf->cdata, cc->rlen,
+					cc->clen, level, cc->private);
+	else
+		len = LZ4_compress_default(cc->rbuf, cc->cbuf->cdata, cc->rlen,
+						cc->clen, cc->private);
+	if (!len)
+		return -EAGAIN;
+
+	cc->clen = len;
+	return 0;
+}
+#endif
 
 static int lz4_compress_pages(struct compress_ctx *cc)
 {
@@ -295,6 +323,8 @@ static int zstd_init_compress_ctx(struct compress_ctx *cc)
 	zstd_cstream *stream;
 	void *workspace;
 	unsigned int workspace_size;
+    unsigned char level = F2FS_I(cc->inode)->i_compress_flag >>
+						COMPRESS_LEVEL_OFFSET;
 
 	if (!level)
 		level = F2FS_ZSTD_DEFAULT_CLEVEL;
@@ -379,6 +409,9 @@ static int zstd_init_decompress_ctx(struct decompress_io_ctx *dic)
 	zstd_dstream *stream;
 	void *workspace;
 	unsigned int workspace_size;
+
+    unsigned int max_window_size =
+			MAX_COMPRESS_WINDOW_SIZE(dic->log_cluster_size);
 
 
 	workspace_size = zstd_dstream_workspace_bound(max_window_size);

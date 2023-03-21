@@ -30,7 +30,6 @@
 
 DEFINE_PER_CPU_SHARED_ALIGNED(struct rq, runqueues);
 
-#ifdef CONFIG_SCHED_DEBUG
 /*
 
  * Number of tasks to iterate in a single balance run.
