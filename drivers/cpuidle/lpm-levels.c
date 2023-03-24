@@ -29,12 +29,10 @@
 #include <linux/cpuhotplug.h>
 #include <linux/regulator/machine.h>
 #include <linux/sched/clock.h>
-#include <linux/rcupdate.h>
 #include <soc/qcom/pm.h>
 #include <soc/qcom/event_timer.h>
 #include <soc/qcom/lpm_levels.h>
 #include <soc/qcom/lpm-stats.h>
-#include <soc/qcom/minidump.h>
 #include <asm/arch_timer.h>
 #include <asm/suspend.h>
 #include <asm/cpuidle.h>
@@ -51,11 +49,10 @@
 static struct system_pm_ops *sys_pm_ops;
 struct lpm_cluster *lpm_root_node;
 
-static uint32_t bias_hyst;
-module_param_named(bias_hyst, bias_hyst, uint, 0664);
 
 static DEFINE_PER_CPU(struct lpm_cpu*, cpu_lpm);
 static bool suspend_in_progress;
+static struct hrtimer lpm_hrtimer;
 
 static void cluster_unprepare(struct lpm_cluster *cluster,
 		const struct cpumask *cpu, int child_idx, bool from_idle,
@@ -67,10 +64,8 @@ static void cluster_prepare(struct lpm_cluster *cluster,
 static bool print_parsed_dt;
 module_param_named(print_parsed_dt, print_parsed_dt, bool, 0664);
 
-#ifdef CONFIG_MIHW
-static bool sleep_disabled_dev;
-module_param_named(sleep_disabled_dev, sleep_disabled_dev, bool, 0664);
-#endif
+static bool sleep_disabled;
+module_param_named(sleep_disabled, sleep_disabled, bool, 0664);
 
 /**
  * msm_cpuidle_get_deep_idle_latency - Get deep idle latency value
@@ -93,44 +88,141 @@ uint32_t register_system_pm_ops(struct system_pm_ops *pm_ops)
 	return 0;
 }
 
-#ifdef CONFIG_MIHW
-/**
- * device type for disable lpm
- *   type     event    bitmap
- *   input      0x1      bit0
- *  FrontCAM    0x2      bit1
- **/
-#define EVENT_INPUT 0x1
-#define EVENT_FCAM  0x2
-#define EVENT_SUM   0x2
-static unsigned long lpm_dev_bitmp;
-
-void lpm_disable_for_dev(bool on, char event_dev)
+static uint32_t least_cluster_latency(struct lpm_cluster *cluster,
+					struct latency_level *lat_level)
 {
-	unsigned long mask = BIT_MASK(event_dev);
+	struct list_head *list;
+	struct lpm_cluster_level *level;
+	struct lpm_cluster *n;
+	struct power_params *pwr_params;
+	uint32_t latency = 0;
+	int i;
 
-	if (event_dev > EVENT_SUM) {
-		pr_err("No support device %d disable lpm\n", event_dev);
-		return;
-	}
-
-	if (on) {
-		lpm_dev_bitmp |= mask;
-		sleep_disabled_dev = !!on;
+	if (list_empty(&cluster->list)) {
+		for (i = 0; i < cluster->nlevels; i++) {
+			level = &cluster->levels[i];
+			pwr_params = &level->pwr;
+			if (lat_level->reset_level == level->reset_level) {
+				if ((latency > pwr_params->exit_latency)
+						|| (!latency))
+					latency = pwr_params->exit_latency;
+				break;
+			}
+		}
 	} else {
-		lpm_dev_bitmp &= ~mask;
-		if (lpm_dev_bitmp == 0)
-			sleep_disabled_dev = !!on;
+		list_for_each(list, &cluster->parent->child) {
+			n = list_entry(list, typeof(*n), list);
+			if (lat_level->level_name) {
+				if (strcmp(lat_level->level_name,
+						 n->cluster_name))
+					continue;
+			}
+			for (i = 0; i < n->nlevels; i++) {
+				level = &n->levels[i];
+				pwr_params = &level->pwr;
+				if (lat_level->reset_level ==
+						level->reset_level) {
+					if ((latency > pwr_params->exit_latency)
+								|| (!latency))
+						latency =
+						pwr_params->exit_latency;
+					break;
+				}
+			}
+		}
 	}
+	return latency;
 }
-EXPORT_SYMBOL(lpm_disable_for_dev);
-#else
-void lpm_disable_for_dev(bool on, char event_dev)
+
+static uint32_t least_cpu_latency(struct list_head *child,
+				struct latency_level *lat_level)
 {
-	// Do nothing
+	struct list_head *list;
+	struct lpm_cpu_level *level;
+	struct power_params *pwr_params;
+	struct lpm_cpu *cpu;
+	struct lpm_cluster *n;
+	uint32_t lat = 0;
+	int i;
+
+	list_for_each(list, child) {
+		n = list_entry(list, typeof(*n), list);
+		if (lat_level->level_name) {
+			if (strcmp(lat_level->level_name, n->cluster_name))
+				continue;
+		}
+		list_for_each_entry(cpu, &n->cpu, list) {
+			for (i = 0; i < cpu->nlevels; i++) {
+				level = &cpu->levels[i];
+				pwr_params = &level->pwr;
+				if (lat_level->reset_level
+						== level->reset_level) {
+					if ((lat > pwr_params->exit_latency)
+							|| (!lat))
+						lat = pwr_params->exit_latency;
+					break;
+				}
+			}
+		}
+	}
+	return lat;
 }
-EXPORT_SYMBOL(lpm_disable_for_dev);
-#endif
+
+static struct lpm_cluster *cluster_aff_match(struct lpm_cluster *cluster,
+							int affinity_level)
+{
+	struct lpm_cluster *n;
+
+	if ((cluster->aff_level == affinity_level)
+		|| ((!list_empty(&cluster->cpu)) && (affinity_level == 0)))
+		return cluster;
+	else if (list_empty(&cluster->cpu)) {
+		n =  list_entry(cluster->child.next, typeof(*n), list);
+		return cluster_aff_match(n, affinity_level);
+	} else
+		return NULL;
+}
+
+int lpm_get_latency(struct latency_level *level, uint32_t *latency)
+{
+	struct lpm_cluster *cluster;
+	uint32_t val;
+
+	if (!lpm_root_node) {
+		pr_err("lpm_probe not completed\n");
+		return -EAGAIN;
+	}
+
+	if ((level->affinity_level < 0)
+		|| (level->affinity_level > lpm_root_node->aff_level)
+		|| (level->reset_level < LPM_RESET_LVL_RET)
+		|| (level->reset_level > LPM_RESET_LVL_PC)
+		|| !latency)
+		return -EINVAL;
+
+	cluster = cluster_aff_match(lpm_root_node, level->affinity_level);
+	if (!cluster) {
+		pr_err("No matching cluster found for affinity_level:%d\n",
+							level->affinity_level);
+		return -EINVAL;
+	}
+
+	if (level->affinity_level == 0)
+		val = least_cpu_latency(&cluster->parent->child, level);
+	else
+		val = least_cluster_latency(cluster, level);
+
+	if (!val) {
+		pr_err("No mode with affinity_level:%d reset_level:%d\n",
+				level->affinity_level, level->reset_level);
+		return -EINVAL;
+	}
+
+	*latency = val;
+
+	return 0;
+}
+EXPORT_SYMBOL(lpm_get_latency);
 
 static int lpm_dying_cpu(unsigned int cpu)
 {
@@ -149,8 +241,36 @@ static int lpm_starting_cpu(unsigned int cpu)
 	return 0;
 }
 
+static enum hrtimer_restart lpm_hrtimer_cb(struct hrtimer *h)
+{
+	return HRTIMER_NORESTART;
+}
 
-/*
+static void msm_pm_set_timer(uint32_t modified_time_us)
+{
+	u64 modified_time_ns = modified_time_us * NSEC_PER_USEC;
+	ktime_t modified_ktime = ns_to_ktime(modified_time_ns);
+
+	lpm_hrtimer.function = lpm_hrtimer_cb;
+	hrtimer_start(&lpm_hrtimer, modified_ktime, HRTIMER_MODE_REL_PINNED);
+}
+
+
+static inline bool lpm_disallowed(s64 sleep_us, int cpu, struct lpm_cpu *pm_cpu)
+{
+	if (cpu_isolated(cpu))
+		goto out;
+
+	if (sleep_disabled)
+		return true;
+
+out:
+	if (sleep_us < 0)
+		return true;
+
+	return false;
+}
+
 static void calculate_next_wakeup(uint32_t *next_wakeup_us,
 				  uint32_t next_event_us,
 				  uint32_t lvl_latency_us,
@@ -164,8 +284,67 @@ static void calculate_next_wakeup(uint32_t *next_wakeup_us,
 
 	if (next_event_us < sleep_us)
 		*next_wakeup_us = next_event_us - lvl_latency_us;
-} 
-*/
+}
+
+static int cpu_power_select(struct cpuidle_device *dev,
+		struct lpm_cpu *cpu)
+{
+	ktime_t delta_next;
+	int best_level = 0;
+	uint32_t latency_us = pm_qos_request_for_cpu(PM_QOS_CPU_DMA_LATENCY,
+							dev->cpu);
+	s64 sleep_us = ktime_to_us(tick_nohz_get_sleep_length(&delta_next));
+	uint32_t modified_time_us = 0;
+	uint32_t next_event_us = 0;
+	int i, idx_restrict;
+	uint32_t lvl_latency_us = 0;
+	uint32_t next_wakeup_us = (uint32_t)sleep_us;
+	uint32_t max_residency;
+	struct power_params *pwr_params;
+
+	if (lpm_disallowed(sleep_us, dev->cpu, cpu))
+		goto done_select;
+
+	idx_restrict = cpu->nlevels + 1;
+	next_event_us = (uint32_t)(ktime_to_us(get_next_event_time(dev->cpu)));
+
+	for (i = 0; i < cpu->nlevels; i++) {
+		if (!lpm_cpu_mode_allow(dev->cpu, i, true))
+			continue;
+
+		pwr_params = &cpu->levels[i].pwr;
+		lvl_latency_us = pwr_params->exit_latency;
+		max_residency = pwr_params->max_residency;
+
+		if (latency_us <= lvl_latency_us)
+			break;
+
+		calculate_next_wakeup(&next_wakeup_us, next_event_us,
+				      lvl_latency_us, sleep_us);
+
+		if (i >= idx_restrict)
+			break;
+
+		best_level = i;
+
+		if (next_event_us && next_event_us < sleep_us && !i)
+			modified_time_us = next_event_us - lvl_latency_us;
+		else
+			modified_time_us = 0;
+
+		if (next_wakeup_us <= max_residency)
+			break;
+	}
+
+	if (modified_time_us)
+		msm_pm_set_timer(modified_time_us);
+
+
+done_select:
+	trace_cpu_power_select(best_level, sleep_us, latency_us, next_event_us);
+
+	return best_level;
+}
 
 static unsigned int get_next_online_cpu(bool from_idle)
 {
@@ -208,6 +387,7 @@ static uint64_t get_cluster_sleep_time(struct lpm_cluster *cluster,
 		next_event_c = get_next_event_cpu(cpu);
 		if (*next_event_c < next_event)
 			next_event = *next_event_c;
+
 	}
 
 	if (ktime_to_us(next_event) > ktime_to_us(ktime_get()))
@@ -216,7 +396,9 @@ static uint64_t get_cluster_sleep_time(struct lpm_cluster *cluster,
 		return 0;
 }
 
+
 static int cluster_select(struct lpm_cluster *cluster, bool from_idle)
+
 {
 	int best_level = -1;
 	int i;
@@ -289,6 +471,7 @@ static int cluster_configure(struct lpm_cluster *cluster, int idx,
 			cluster->num_children_in_sync.bits[0],
 			cluster->child_cpus.bits[0], from_idle);
 		lpm_stats_cluster_enter(cluster->stats, idx);
+
 	}
 
 	if (level->notify_rpm) {
@@ -520,17 +703,41 @@ static int psci_enter_sleep(struct lpm_cpu *cpu, int idx, bool from_idle)
 static int lpm_cpuidle_select(struct cpuidle_driver *drv,
 		struct cpuidle_device *dev, bool *stop_tick)
 {
-	return 0;
+	struct lpm_cpu *cpu = per_cpu(cpu_lpm, dev->cpu);
+
+	if (!cpu)
+		return 0;
+
+	return cpu_power_select(dev, cpu);
 }
+
 
 static int lpm_cpuidle_enter(struct cpuidle_device *dev,
 		struct cpuidle_driver *drv, int idx)
 {
-	if (!need_resched()) {
-		cpuidle_set_idle_cpu(dev->cpu);
-		wfi();
-		cpuidle_clear_idle_cpu(dev->cpu);
-	}
+	struct lpm_cpu *cpu = per_cpu(cpu_lpm, dev->cpu);
+	bool success = false;
+	const struct cpumask *cpumask = get_cpu_mask(dev->cpu);
+	ktime_t start = ktime_get();
+
+	cpu_prepare(cpu, idx, true);
+	cluster_prepare(cpu->parent, cpumask, idx, true, 0);
+
+	RCU_NONIDLE(trace_cpu_idle_enter(idx));
+	lpm_stats_cpu_enter(idx, 0);
+
+	if (need_resched())
+		goto exit;
+
+	cpuidle_set_idle_cpu(dev->cpu);
+	success = psci_enter_sleep(cpu, idx, true);
+	cpuidle_clear_idle_cpu(dev->cpu);
+
+exit:
+	lpm_stats_cpu_exit(idx, 0, success);
+
+	cluster_unprepare(cpu->parent, cpumask, idx, true, 0, success);
+	cpu_unprepare(cpu, idx, true);
 	return idx;
 }
 
@@ -818,10 +1025,8 @@ static const struct platform_s2idle_ops lpm_s2idle_ops = {
 static int lpm_probe(struct platform_device *pdev)
 {
 	int ret;
-	//int size;//
-	//unsigned int cpu;//
+	unsigned int cpu;
 	struct kobject *module_kobj = NULL;
-	//struct md_region md_entry;//
 
 	get_online_cpus();
 	lpm_root_node = lpm_of_parse_cluster(pdev);
@@ -843,6 +1048,7 @@ static int lpm_probe(struct platform_device *pdev)
 	 */
 	suspend_set_ops(&lpm_suspend_ops);
 	s2idle_set_ops(&lpm_s2idle_ops);
+	hrtimer_init(&lpm_hrtimer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
 
 	register_cluster_lpm_stats(lpm_root_node, NULL);
 
@@ -871,6 +1077,7 @@ static int lpm_probe(struct platform_device *pdev)
 		pr_err("Failed to create cluster level nodes\n");
 		goto failed;
 	}
+
 
 	return 0;
 failed:
