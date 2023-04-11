@@ -241,10 +241,7 @@ enum binder_deferred_state {
  * SCHED_FIFO
  * SCHED_RR
  */
-struct binder_priority {
-	unsigned int sched_policy;
-	int prio;
-};
+
 
 /**
  * struct binder_proc - binder process bookkeeping
@@ -318,43 +315,7 @@ struct binder_priority {
  *
  * Bookkeeping structure for binder processes
  */
-struct binder_proc {
-	struct hlist_node proc_node;
-	struct rb_root threads;
-	struct rb_root nodes;
-	struct rb_root refs_by_desc;
-	struct rb_root refs_by_node;
-	struct list_head waiting_threads;
-	int pid;
-	struct task_struct *tsk;
-	struct files_struct *files;
-	struct mutex files_lock;
-	const struct cred *cred;
-	struct hlist_node deferred_work_node;
-	int deferred_work;
-	int outstanding_txns;
-	bool is_dead;
-	bool is_frozen;
-	bool sync_recv;
-	bool async_recv;
-	wait_queue_head_t freeze_wait;
 
-	struct list_head todo;
-	struct binder_stats stats;
-	struct list_head delivered_death;
-	int max_threads;
-	int requested_threads;
-	int requested_threads_started;
-	int tmp_ref;
-	struct binder_priority default_priority;
-	struct dentry *debugfs_entry;
-	struct binder_alloc alloc;
-	struct binder_context *context;
-	spinlock_t inner_lock;
-	spinlock_t outer_lock;
-	struct dentry *binderfs_entry;
->>>>>>> 06cfd5f6b8f1 (binder: implement BINDER_FREEZE ioctl)
-};
 
 enum {
 	BINDER_LOOPER_STATE_REGISTERED  = 0x01,
