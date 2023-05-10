@@ -498,6 +498,14 @@ unsigned long schedhorizon_cpu_util(int cpu, unsigned long util_cfs,
 	return min(max, util);
 }
 
+
+unsigned long sched_cpu_util(int cpu)
+{
+    unsigned long max = arch_scale_cpu_capacity(cpu);
+	return schedutil_cpu_util(cpu, cpu_util_cfs(cpu_rq(cpu)), max,
+				  ENERGY_UTIL, NULL);
+}
+
 #ifdef CONFIG_SCHED_WALT
 static unsigned long sugov_get_util(struct sugov_cpu *sg_cpu)
 {
@@ -520,7 +528,7 @@ static unsigned long sugov_get_util(struct sugov_cpu *sg_cpu)
 	sg_cpu->max = max;
 	sg_cpu->bw_dl = cpu_bw_dl(rq);
 
-	return schedhorizon_cpu_util(sg_cpu->cpu, util_cfs, max,
+	return schedutil_cpu_util(sg_cpu->cpu, util_cfs, max,
 				  FREQUENCY_UTIL, NULL);
 }
 #endif

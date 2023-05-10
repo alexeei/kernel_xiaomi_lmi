@@ -430,6 +430,10 @@ unsigned long schedutil_cpu_util(int cpu, unsigned long util_cfs,
 	return min(max, util);
 }
 
+EXPORT_SYMBOL_GPL(schedutil_cpu_util);
+
+
+
 #ifdef CONFIG_SCHED_WALT
 static unsigned long sugov_get_util(struct sugov_cpu *sg_cpu)
 {
@@ -457,7 +461,7 @@ static unsigned long sugov_get_util(struct sugov_cpu *sg_cpu)
 }
 #endif
 
-unsigned long sched_cpu_util(int cpu)
+unsigned long sched_cpu_util1(int cpu)
 {
 	unsigned long max = arch_scale_cpu_capacity(cpu);
 
