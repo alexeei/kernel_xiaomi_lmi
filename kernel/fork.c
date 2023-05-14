@@ -2384,18 +2384,6 @@ long _do_fork(unsigned long clone_flags,
 	int trace = 0;
 	long nr;
 
-	if (task_is_zygote(current)) {
-                cpu_input_boost_kick_max(50);
-		devfreq_boost_kick_max(DEVFREQ_CPU_LLCC_DDR_BW, 50);
-                devfreq_boost_kick_max(DEVFREQ_MSM_CPU0_CPU_L3_LAT, 50);
-                devfreq_boost_kick_max(DEVFREQ_MSM_CPU4_CPU_L3_LAT, 50);
-                devfreq_boost_kick_max(DEVFREQ_MSM_CPU7_CPU_L3_LAT, 50);
-                devfreq_boost_kick_max(DEVFREQ_MSM_CPU0_CPU_LLCC_LAT, 50);
-                devfreq_boost_kick_max(DEVFREQ_MSM_CPU4_CPU_LLCC_LAT, 50);
-                devfreq_boost_kick_max(DEVFREQ_MSM_CPU0_LLCC_DDR_LAT, 50);
-                devfreq_boost_kick_max(DEVFREQ_MSM_CPU4_LLCC_DDR_LAT, 50);
-	}
-
 	/*
 	 * Determine whether and which event to report to ptracer.  When
 	 * called from kernel_thread or CLONE_UNTRACED is explicitly
