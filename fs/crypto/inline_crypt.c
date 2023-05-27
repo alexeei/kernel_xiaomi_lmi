@@ -148,7 +148,8 @@ int fscrypt_select_encryption_impl(struct fscrypt_info *ci,
 	if (num_devs == 1) {
 		devs = &devs_onstack;
 	} else {
-		devs = kmalloc_array(num_devs, sizeof(*devs), GFP_KERNEL);
+
+		devs = kmalloc_array(num_devs, sizeof(*devs), GFP_NOFS);
 		if (!devs)
 			return -ENOMEM;
 	}
