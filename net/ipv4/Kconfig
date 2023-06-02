@@ -508,7 +508,7 @@ config TCP_CONG_BIC
 
 config TCP_CONG_CUBIC
 	tristate "CUBIC TCP"
-	default y
+	default n
 	---help---
 	This is version 2.0 of BIC-TCP which uses a cubic growth function
 	among other techniques.
@@ -693,7 +693,7 @@ config TCP_CONG_BBR
 
 config TCP_CONG_BBR2
 	tristate "BBR2 TCP"
-	default n
+	default y
 	---help---
 
 	BBR2 TCP congestion control is a model-based congestion control
