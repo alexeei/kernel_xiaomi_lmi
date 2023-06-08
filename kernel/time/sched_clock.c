@@ -75,7 +75,6 @@ static u64 suspend_ns;
 static u64 suspend_cycles;
 static u64 resume_cycles;
 static u64 resume_ns;
-static u64 first_cycle = 1;
 u64 sum_wakeup_time;
 u64 sum_wakeup_times;
 u64 last_wake_time;
