@@ -767,6 +767,16 @@ KBUILD_CFLAGS += $(POLLY_FLAGS)
 KBUILD_AFLAGS += $(POLLY_FLAGS)
 KBUILD_LDFLAGS	+= $(POLLY_FLAGS)
 endif
+
+ifdef CONFIG_INLINE_OPTIMIZATION
+KBUILD_CFLAGS	+= -mllvm -inline-threshold=2000
+KBUILD_CFLAGS	+= -mllvm -inlinehint-threshold=3000
+KBUILD_CFLAGS   += -mllvm -unroll-threshold=1200
+endif
+else
+KBUILD_CFLAGS   += -O2
+KBUILD_AFLAGS   += -O2
+KBUILD_LDFLAGS  += -O2
 endif
 
 # Tell gcc to never replace conditional load with a non-conditional one
