@@ -219,9 +219,7 @@ static int prealloc_memcg_shrinker(struct shrinker *shrinker)
 {
 	int id, ret = -ENOMEM;
 
-	down_write(&shrinker->del_rwsem);
-	spin_lock(&shrinker_lock);
-	write_lock(&shrinker_rwlock);
+	down_write(&shrinker_rwsem);
 	/* This may call shrinker, so it must use down_read_trylock() */
 	id = idr_alloc(&shrinker_idr, SHRINKER_REGISTERING, 0, 0, GFP_KERNEL);
 	if (id < 0)
@@ -238,9 +236,7 @@ static int prealloc_memcg_shrinker(struct shrinker *shrinker)
 	shrinker->id = id;
 	ret = 0;
 unlock:
-	write_unlock(&shrinker_rwlock);
-	spin_unlock(&shrinker_lock);
-	up_write(&shrinker->del_rwsem);
+	up_write(&shrinker_rwsem);
 	return ret;
 }
 
@@ -250,13 +246,9 @@ static void unregister_memcg_shrinker(struct shrinker *shrinker)
 
 	BUG_ON(id < 0);
 
-	down_write(&shrinker->del_rwsem);
-	spin_lock(&shrinker_lock);
-	write_lock(&shrinker_rwlock);
+	down_write(&shrinker_rwsem);
 	idr_remove(&shrinker_idr, id);
-	write_unlock(&shrinker_rwlock);
-	spin_unlock(&shrinker_lock);
-	up_write(&shrinker->del_rwsem);
+	up_write(&shrinker_rwsem);
 }
 #else /* CONFIG_MEMCG_KMEM */
 static int prealloc_memcg_shrinker(struct shrinker *shrinker)
@@ -471,9 +463,11 @@ void unregister_shrinker(struct shrinker *shrinker)
 		return;
 	if (shrinker->flags & SHRINKER_MEMCG_AWARE)
 		unregister_memcg_shrinker(shrinker);
-	down_write(&shrinker_rwsem);
+    down_write(&shrinker_rwsem);
+
 	list_del(&shrinker->list);
-	up_write(&shrinker_rwsem);
+    up_write(&shrinker_rwsem);
+
 	kfree(shrinker->nr_deferred);
 	shrinker->nr_deferred = NULL;
 }
@@ -626,7 +620,8 @@ static unsigned long shrink_slab_memcg(gfp_t gfp_mask, int nid,
 	if (!memcg_kmem_enabled() || !mem_cgroup_online(memcg))
 		return 0;
 
-    read_lock(&shrinker_rwlock);
+	if (!down_read_trylock(&shrinker_rwsem))
+		return 0;
 
 	map = rcu_dereference_protected(memcg->nodeinfo[nid]->shrinker_map,
 					true);
@@ -675,14 +670,13 @@ static unsigned long shrink_slab_memcg(gfp_t gfp_mask, int nid,
 		}
 		freed += ret;
 
-		
-		read_lock(&shrinker_rwlock);
-		up_read(&shrinker->del_rwsem);
+		if (rwsem_is_contended(&shrinker_rwsem)) {
+			freed = freed ? : 1;
+			break;
+		}
 	}
-       
-
 unlock:
-    read_unlock(&shrinker_rwlock);
+	up_read(&shrinker_rwsem);
 	return freed;
 }
 #else /* CONFIG_MEMCG_KMEM */
@@ -730,10 +724,11 @@ static unsigned long shrink_slab(gfp_t gfp_mask, int nid,
 	if (!mem_cgroup_disabled() && !mem_cgroup_is_root(memcg))
 		return shrink_slab_memcg(gfp_mask, nid, memcg, priority);
 
-	if (!down_read_trylock(&shrinker_rwsem))
+   if (!down_read_trylock(&shrinker_rwsem))
 		goto out;
 
 	list_for_each_entry(shrinker, &shrinker_list, list) {
+
 		struct shrink_control sc = {
 			.gfp_mask = gfp_mask,
 			.nid = nid,
@@ -744,7 +739,8 @@ static unsigned long shrink_slab(gfp_t gfp_mask, int nid,
 		if (ret == SHRINK_EMPTY)
 			ret = 0;
 		freed += ret;
-		/*
+
+        /*
 		 * Bail out if someone want to register a new shrinker to
 		 * prevent the regsitration from being stalled for long periods
 		 * by parallel ongoing shrinking.
@@ -753,10 +749,11 @@ static unsigned long shrink_slab(gfp_t gfp_mask, int nid,
 			freed = freed ? : 1;
 			break;
 		}
-	}
 
+	}
 	up_read(&shrinker_rwsem);
 out:
+
 	cond_resched();
 	return freed;
 }
