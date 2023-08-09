@@ -5,6 +5,17 @@
 #include "linux/key.h"
 #include "linux/version.h"
 
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 8, 0)
+#define ksu_strncpy_from_user_nofault strncpy_from_user_nofault
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0)
+#define ksu_strncpy_from_user_nofault strncpy_from_unsafe_user
+#else
+#define ksu_strncpy_from_user_nofault probe_kernel_read
+#endif
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 10, 0)
+
 extern struct key *init_session_keyring;
 
 extern ssize_t ksu_kernel_read_compat(struct file *p, void *buf, size_t count, loff_t *pos);
