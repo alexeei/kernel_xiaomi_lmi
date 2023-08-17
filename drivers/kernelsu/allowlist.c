@@ -139,13 +139,19 @@ exit:
 	return found;
 }
 
+static inline bool forbid_system_uid(uid_t uid) {
+	#define SHELL_UID 2000
+	#define SYSTEM_UID 1000
+	return uid < SHELL_UID && uid != SYSTEM_UID;
+}
+
 static bool profile_valid(struct app_profile *profile)
 {
 	if (!profile) {
 		return false;
 	}
 
-	if (profile->current_uid < 2000) {
+	if (forbid_system_uid(profile->current_uid)) {
 		pr_err("uid lower than 2000 is unsupported: %d\n", profile->current_uid);
 		return false;
 	}
@@ -263,7 +269,7 @@ bool __ksu_is_allow_uid(uid_t uid)
 		return is_ksu_domain();
 	}
 
-	if (uid < 2000) {
+	if (forbid_system_uid(uid)) {
 		// do not bother going through the list if it's system
 		return false;
 	}
@@ -343,12 +349,11 @@ void do_save_allow_list(struct work_struct *work)
 	struct perm_data *p = NULL;
 	struct list_head *pos = NULL;
 	loff_t off = 0;
-	KWORKER_INSTALL_KEYRING();
-	struct file *fp =
-		filp_open(KERNEL_SU_ALLOWLIST, O_WRONLY | O_CREAT, 0644);
 
+	struct file *fp =
+		ksu_filp_open_compat(KERNEL_SU_ALLOWLIST, O_WRONLY | O_CREAT, 0644);
 	if (IS_ERR(fp)) {
-		pr_err("save_allow_list creat file failed: %ld\n", PTR_ERR(fp));
+		pr_err("save_allow_list create file failed: %ld\n", PTR_ERR(fp));
 		return;
 	}
 
@@ -386,15 +391,14 @@ void do_load_allow_list(struct work_struct *work)
 	struct file *fp = NULL;
 	u32 magic;
 	u32 version;
-	KWORKER_INSTALL_KEYRING();
 
 #ifdef CONFIG_KSU_DEBUG
 	// always allow adb shell by default
 	ksu_grant_root_to_shell();
 #endif
-	// load allowlist now!
-	fp = filp_open(KERNEL_SU_ALLOWLIST, O_RDONLY, 0);
 
+	// load allowlist now!
+	fp = ksu_filp_open_compat(KERNEL_SU_ALLOWLIST, O_RDONLY, 0);
 	if (IS_ERR(fp)) {
 		pr_err("load_allow_list open file failed: %ld\n", PTR_ERR(fp));
 		return;
