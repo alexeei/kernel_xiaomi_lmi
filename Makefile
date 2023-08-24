@@ -86,6 +86,19 @@ else
   Q = @
 endif
 
+ifeq ($(CONFIG_ARCH_KONA), y)
+ifeq ($(cc-name),clang)
+KBUILD_CFLAGS   += -march=armv8.2-a+crypto+crc -mtune=cortex-a55 -mcpu=cortex-a55
+KBUILD_AFLAGS   += -march=armv8.2-a+crypto+crc -mtune=cortex-a55 -mcpu=cortex-a55
+ifeq ($(CONFIG_LD_IS_LLD), y)
+KBUILD_LDFLAGS  += -mllvm -march=armv8.2-a+crypto+crc -mtune=cortex-a55 -mcpu=cortex-a55
+endif
+else
+KBUILD_CFLAGS   += -mcpu=cortex-a77.cortex-a55
+KBUILD_AFLAGS   += -mcpu=cortex-a77.cortex-a55
+endif
+endif
+
 # If the user is running make -s (silent mode), suppress echoing of
 # commands
 # make-4.0 (and later) keep single letter options in the 1st word of MAKEFLAGS.
