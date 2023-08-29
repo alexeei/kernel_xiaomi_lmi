@@ -106,7 +106,7 @@
 #include <linux/kernel.h>
 #include <linux/sched/clock.h>
 #include <linux/tick.h>
-#include <linux/pm_qos.h>
+
 
 /*
  * The PULSE value is added to metrics when they grow and the DECAY_SHIFT value
