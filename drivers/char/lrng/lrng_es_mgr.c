@@ -270,6 +270,7 @@ int __init rand_initialize(void)
 	} seed __aligned(LRNG_KCAPI_ALIGN);
 	unsigned int i;
 
+<<<<<<< HEAD
 	BUILD_BUG_ON(LRNG_MAX_DIGESTSIZE % sizeof(unsigned long));
 
 	seed.time = ktime_get_real();
@@ -277,6 +278,11 @@ int __init rand_initialize(void)
 	for (i = 0; i < ARRAY_SIZE(seed.data); i++) {
 		if (!arch_get_random_seed_long(&(seed.data[i])) &&
 		    !arch_get_random_long(&seed.data[i]))
+=======
+	for (i = 0; i < ARRAY_SIZE(seed.data); i++) {
+		if (!arch_get_random_seed_long_early(&(seed.data[i])) &&
+		    !arch_get_random_long_early(&seed.data[i]))
+>>>>>>> a4f770692400 (LRNG - apply v51-4.19.294 backports)
 			seed.data[i] = random_get_entropy();
 	}
 	memcpy(&seed.utsname, utsname(), sizeof(*(utsname())));

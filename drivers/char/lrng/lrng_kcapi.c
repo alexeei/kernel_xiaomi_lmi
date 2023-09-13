@@ -46,9 +46,16 @@ static int lrng_kcapi_drng_seed_helper(void *drng, const u8 *inbuf,
 	SHASH_DESC_ON_STACK(shash, NULL);
 	struct lrng_drng_info *lrng_drng_info = (struct lrng_drng_info *)drng;
 	struct crypto_rng *kcapi_rng = lrng_drng_info->kcapi_rng;
+<<<<<<< HEAD:drivers/char/lrng/lrng_kcapi.c
 	void *hash = lrng_drng_info->lrng_hash;
 	u32 digestsize = lrng_kcapi_hash_digestsize(hash);
 	u8 digest[HASH_MAX_DIGESTSIZE] __aligned(8);
+=======
+	struct crypto_shash *hash_tfm = lrng_drng_info->hash_tfm;
+	SHASH_DESC_ON_STACK(shash, hash_tfm);
+	u32 digestsize;
+	u8 digest[64] __aligned(8);
+>>>>>>> a4f770692400 (LRNG - apply v51-4.19.294 backports):drivers/char/lrng/lrng_drng_kcapi.c
 	int ret;
 
 	if (!hash)

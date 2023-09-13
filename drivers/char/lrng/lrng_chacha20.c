@@ -8,7 +8,7 @@
 
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
-#include <crypto/chacha.h>
+#include <crypto/chacha20.h>
 #include <linux/lrng.h>
 #include <linux/random.h>
 #include <linux/slab.h>
@@ -183,6 +183,7 @@ static void lrng_cc20_drng_dealloc(void *drng)
 
 	pr_debug("ChaCha20 core zeroized and freed\n");
 	kzfree(chacha20_state);
+<<<<<<< HEAD:drivers/char/lrng/lrng_chacha20.c
 }
 
 /******************************* Hash Operation *******************************/
@@ -297,6 +298,8 @@ static void *lrng_cc20_hash_alloc(void)
 
 static void lrng_cc20_hash_dealloc(void *hash)
 {
+=======
+>>>>>>> a4f770692400 (LRNG - apply v51-4.19.294 backports):drivers/char/lrng/lrng_drng_chacha20.c
 }
 
 static const char *lrng_cc20_drng_name(void)
