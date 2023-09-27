@@ -1276,7 +1276,8 @@ bool out_of_memory(struct oom_control *oc)
 	if (IS_ENABLED(CONFIG_ANDROID_SIMPLE_LMK))
 		return true;
 
-	if (oom_killer_disabled || IS_ENABLED(CONFIG_ANDROID_SIMPLE_LMK))
+
+	if (oom_killer_disabled)
 		return false;
 
 	if (try_online_one_block(numa_node_id())) {
