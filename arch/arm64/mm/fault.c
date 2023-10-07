@@ -396,6 +396,7 @@ static void do_bad_area(unsigned long addr, unsigned int esr, struct pt_regs *re
 static int __do_page_fault(struct vm_area_struct *vma, unsigned long addr,
 unsigned int mm_flags, unsigned long vm_flags)
 {
+
 	vm_fault_t fault;
 
 	fault = VM_FAULT_BADMAP;
@@ -441,6 +442,10 @@ static int __kprobes do_page_fault(unsigned long addr, unsigned int esr,
 	unsigned long vm_flags = VM_READ | VM_WRITE | VM_EXEC;
 	unsigned int mm_flags = FAULT_FLAG_ALLOW_RETRY | FAULT_FLAG_KILLABLE;
 	struct vm_area_struct *vma = NULL;
+
+    ktime_t event_ts;
+
+    mm_event_start(&event_ts);
 
 	if (notify_page_fault(regs, esr))
 		return 0;

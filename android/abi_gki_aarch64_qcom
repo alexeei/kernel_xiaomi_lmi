@@ -1373,6 +1373,8 @@
   dput
   flush_dcache_page
   fs_kobj
+  fsnotify
+  __fsnotify_parent
   fsstack_copy_attr_all
   generic_file_llseek
   generic_file_mmap

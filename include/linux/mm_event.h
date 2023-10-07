@@ -18,6 +18,24 @@ enum mm_event_type {
 	MM_TYPE_NUM = 12,
 };
 
+struct mm_event_vmstat {
+	unsigned long free;
+	unsigned long file;
+	unsigned long anon;
+	unsigned long ion;
+	unsigned long slab;
+	unsigned long ws_refault;
+	unsigned long ws_activate;
+	unsigned long mapped;
+	unsigned long pgin;
+	unsigned long pgout;
+	unsigned long swpin;
+	unsigned long swpout;
+	unsigned long reclaim_steal;
+	unsigned long reclaim_scan;
+	unsigned long compact_scan;
+};
+
 struct mm_event_task {
 	unsigned int count;
 	unsigned int max_lat;

@@ -466,7 +466,7 @@ int fscrypt_setup_filename(struct inode *dir, const struct qstr *iname,
 	}
 	if (!lookup)
 		return -ENOKEY;
-	fname->is_ciphertext_name = true;
+	fname->is_nokey_name = true;
 
 	/*
 	 * We don't have the key and we are doing a lookup; decode the
@@ -579,7 +579,7 @@ int fscrypt_d_revalidate(struct dentry *dentry, unsigned int flags)
 	 * reverting to ciphertext names without evicting the directory's inode
 	 * -- which implies eviction of the dentries in the directory.
 	 */
-	if (!(dentry->d_flags & DCACHE_ENCRYPTED_NAME))
+	if (!(dentry->d_flags & DCACHE_NOKEY_NAME))
 		return 1;
 
 	/*

@@ -5275,14 +5275,12 @@ static int fg_psy_get_property(struct power_supply *psy,
 			pval->intval = (int)temp;
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN:
-		if (-EINVAL != fg->bp.nom_cap_uah) {
-			pval->intval = fg->bp.nom_cap_uah * 1000;
-		} else {
-			rc = fg_gen4_get_nominal_capacity(chip, &temp);
-			if (!rc)
-				pval->intval = (int)temp;
+#if IS_ENABLED(CONFIG_MACH_XIAOMI_LMI)
+		 {
+			val->intval = 4700;
+			break;
 		}
-		break;
+#endif
 	case POWER_SUPPLY_PROP_CHARGE_COUNTER:
 		rc = fg_gen4_get_charge_counter(chip, &pval->intval);
 		break;
