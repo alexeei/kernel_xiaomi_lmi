@@ -434,7 +434,7 @@ static void cnss_pci_select_window(struct cnss_pci_data *pci_priv, u32 offset)
 
 	if (window != pci_priv->remap_window) {
 		pci_priv->remap_window = window;
-		cnss_pr_dbg("Config PCIe remap window register to 0x%x\n",
+		cnss_pr_dbg("Config PCIe remap window register to 0x%x\n",window_enable);
 
 	}
 
