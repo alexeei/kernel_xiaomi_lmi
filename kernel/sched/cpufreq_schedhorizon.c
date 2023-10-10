@@ -17,8 +17,8 @@
 #include <trace/events/power.h>
 #include <linux/sched/sysctl.h>
 
-static unsigned int default_efficient_freq_lp[] = {883200,1075200};
-static u64 default_up_delay_lp[] = {150 * NSEC_PER_MSEC,300 * NSEC_PER_MSEC};
+static unsigned int default_efficient_freq_lp[] = {518000,883200,1075200};
+static u64 default_up_delay_lp[] = {150 * NSEC_PER_MSEC,150 * NSEC_PER_MSEC,300 * NSEC_PER_MSEC};
 
 
 static unsigned int default_efficient_freq_hp[] = {710000,1478400,1766400};
