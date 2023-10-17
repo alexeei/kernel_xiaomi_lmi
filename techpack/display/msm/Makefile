@@ -70,12 +70,9 @@ msm_drm-$(CONFIG_DRM_MSM_SDE) += sde/sde_crtc.o \
 	sde/sde_hw_ds.o \
 	sde/sde_fence.o \
 	sde/sde_hw_qdss.o \
-
-
-
-msm_drm-$(CONFIG_DEBUG_FS) += \
 	sde_dbg.o \
-	sde_dbg_evtlog.o
+	sde_dbg_evtlog.o \
+	sde/sde_hw_rc.o \
 
 msm_drm-$(CONFIG_DRM_SDE_WB) += sde/sde_wb.o \
 	sde/sde_encoder_phys_wb.o \
@@ -83,6 +80,8 @@ msm_drm-$(CONFIG_DRM_SDE_WB) += sde/sde_wb.o \
 msm_drm-$(CONFIG_DRM_SDE_RSC) += sde_rsc.o \
 	sde_rsc_hw.o \
 	sde_rsc_hw_v3.o \
+
+msm_drm-$(CONFIG_DRM_SDE_EXPO) += sde/sde_expo_dim_layer.o
 
 msm_drm-$(CONFIG_DRM_MSM_DSI) += dsi/dsi_phy.o \
 	dsi/dsi_pwr.o \
@@ -110,8 +109,6 @@ msm_drm-$(CONFIG_DRM_MSM_DSI) += dsi/dsi_phy.o \
 	dsi/mi_disp_lhbm.o \
 
 msm_drm-$(CONFIG_DSI_PARSER) += dsi/dsi_parser.o \
-
-msm_drm-$(CONFIG_EXPOSURE_ADJUSTMENT) += dsi/exposure_adjustment.o
 
 msm_drm-$(CONFIG_DRM_MSM) += \
 	msm_atomic.o \

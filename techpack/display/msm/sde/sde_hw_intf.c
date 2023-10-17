@@ -755,3 +755,4 @@ void sde_hw_intf_destroy(struct sde_hw_intf *intf)
 		sde_hw_blk_destroy(&intf->base);
 	kfree(intf);
 }
+

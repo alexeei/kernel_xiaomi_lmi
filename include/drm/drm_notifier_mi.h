@@ -23,6 +23,9 @@
 /* A hardware display blank early change occurred */
 #define MI_DRM_EARLY_EVENT_BLANK        0x02
 
+/* A hardware display blank more early change occured */
+#define MI_DRM_PRE_EVENT_BLANK          0x03
+
 enum msm_drm_display_id {
 	/* primary display */
 	MSM_DRM_PRIMARY_DISPLAY,
