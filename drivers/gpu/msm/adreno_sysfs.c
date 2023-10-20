@@ -21,13 +21,6 @@ struct adreno_sysfs_attribute adreno_attr_##_name = { \
 	.store = _ ## _name ## _store, \
 }
 
-#define _ADRENO_SYSFS_FPERM_ATTR(_name, _fperm, __show, __store) \
-struct adreno_sysfs_attribute adreno_attr_##_name = { \
-	.attr = __ATTR(_name, _fperm, __show, __store), \
-	.show = _ ## _name ## _show, \
-	.store = _ ## _name ## _store, \
-}
-
 #define _ADRENO_SYSFS_ATTR_RO(_name, __show) \
 struct adreno_sysfs_attribute adreno_attr_##_name = { \
 	.attr = __ATTR(_name, 0444, __show, NULL), \
@@ -439,6 +432,7 @@ static ADRENO_SYSFS_BOOL(gpu_llc_slice_enable);
 static ADRENO_SYSFS_BOOL(gpuhtw_llc_slice_enable);
 
 static DEVICE_INT_ATTR(wake_nice, 0644, adreno_wake_nice);
+static DEVICE_INT_ATTR(wake_timeout, 0644, adreno_wake_timeout);
 
 static ADRENO_SYSFS_BOOL(sptp_pc);
 static ADRENO_SYSFS_BOOL(lm);
@@ -457,6 +451,7 @@ static const struct attribute *_attr_list[] = {
 	&adreno_attr_ft_long_ib_detect.attr.attr,
 	&adreno_attr_ft_hang_intr_status.attr.attr,
 	&dev_attr_wake_nice.attr.attr,
+	&dev_attr_wake_timeout.attr.attr,
 	&adreno_attr_sptp_pc.attr.attr,
 	&adreno_attr_lm.attr.attr,
 	&adreno_attr_preemption.attr.attr,

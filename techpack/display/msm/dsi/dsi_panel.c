@@ -912,13 +912,14 @@ u32 dsi_panel_get_fod_dim_alpha(struct dsi_panel *panel)
 int dsi_panel_set_fod_hbm(struct dsi_panel *panel, bool status)
 {
 	int rc = 0;
+    int fd1 = 0;
+
+
 
 	if (status) {
-        panel->dimlayer_exposure = 0;
 		dsi_panel_set_disp_param(panel, DISPPARAM_HBM_FOD_ON);
 	} else {
 		dsi_panel_set_disp_param(panel, DISPPARAM_HBM_FOD_OFF);
-        panel->dimlayer_exposure = 1;
 	}
 
 	return rc;

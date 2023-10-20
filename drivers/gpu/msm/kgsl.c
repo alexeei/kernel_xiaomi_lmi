@@ -12,6 +12,7 @@
 #include <linux/io.h>
 #include <linux/ion.h>
 #include <linux/mman.h>
+#include <linux/delay.h>
 #include <linux/module.h>
 #include <linux/msm-bus.h>
 #include <linux/of.h>
@@ -237,6 +238,7 @@ static struct kgsl_mem_entry *kgsl_mem_entry_create(void)
 		atomic_set(&entry->map_count, 0);
 	}
 
+	atomic_set(&entry->map_count, 0);
 	return entry;
 }
 
@@ -975,6 +977,10 @@ static struct kgsl_process_private *kgsl_process_private_new(
 		if (private->pid == cur_pid) {
 			if (!kgsl_process_private_get(private)) {
 				private = ERR_PTR(-EINVAL);
+			}else{
+				mutex_lock(&private->private_mutex);
+				private->fd_count++;
+				mutex_unlock(&private->private_mutex);
 			}
 			/*
 			 * We need to hold only one reference to the PID for
@@ -995,6 +1001,7 @@ static struct kgsl_process_private *kgsl_process_private_new(
 
 	kref_init(&private->refcount);
 
+	private->fd_count = 1;
 	private->pid = cur_pid;
 	get_task_comm(private->comm, current->group_leader);
 
@@ -1087,29 +1094,39 @@ static void kgsl_process_private_close(struct kgsl_device_private *dev_priv,
 	kgsl_process_private_put(private);
 }
 
+static struct kgsl_process_private *_process_private_open(
+		struct kgsl_device *device)
+{
+	struct kgsl_process_private *private;
+
+	mutex_lock(&kgsl_driver.process_mutex);
+	private = kgsl_process_private_new(device);
+	mutex_unlock(&kgsl_driver.process_mutex);
+
+	return private;
+}
 
 static struct kgsl_process_private *kgsl_process_private_open(
 		struct kgsl_device *device)
 {
 	struct kgsl_process_private *private;
+	int i;
+
+	private = _process_private_open(device);
 
 	/*
-	 * Flush mem_workqueue to make sure that any lingering
-	 * structs (process pagetable etc) are released before
-	 * starting over again.
+	 * If we get error and error is -EEXIST that means previous process
+	 * private destroy is triggered but didn't complete. Retry creating
+	 * process private after sometime to allow previous destroy to complete.
 	 */
-	flush_workqueue(kgsl_driver.mem_workqueue);
+	for (i = 0; (PTR_ERR_OR_ZERO(private) == -EEXIST) && (i < 100); i++) {
+		usleep_range(10, 100);
+		private = _process_private_open(device);
+	}
+	if (i >= 100) {
+		pr_info("kgsl: kgsl_process_private_open times = %d\n", i);
+	}
 
-	mutex_lock(&kgsl_driver.process_mutex);
-	private = kgsl_process_private_new(device);
-
-	if (IS_ERR(private))
-		goto done;
-
-	private->fd_count++;
-
-done:
-	mutex_unlock(&kgsl_driver.process_mutex);
 	return private;
 }
 
@@ -1118,7 +1135,8 @@ static int kgsl_close_device(struct kgsl_device *device)
 	int result = 0;
 
 	mutex_lock(&device->mutex);
-	if (device->open_count == 1) {
+	device->open_count--;
+	if (device->open_count == 0) {
 
 		/*
 		 * Wait up to 1 second for the active count to go low
@@ -1135,18 +1153,6 @@ static int kgsl_close_device(struct kgsl_device *device)
 
 		result = kgsl_pwrctrl_change_state(device, KGSL_STATE_INIT);
 	}
-
-	/*
-	 * We must decrement the open_count after last_close() has finished.
-	 * This is because last_close() relinquishes device mutex while
-	 * waiting for active count to become 0. This opens up a window
-	 * where a new process can come in, see that open_count is 0, and
-	 * initiate a first_open(). This can potentially mess up the power
-	 * state machine. To avoid a first_open() from happening before
-	 * last_close() has finished, decrement the open_count after
-	 * last_close().
-	 */
-	device->open_count--;
 	mutex_unlock(&device->mutex);
 	return result;
 
@@ -2119,129 +2125,6 @@ done:
 	return result;
 }
 
-long kgsl_ioctl_gpu_aux_command(struct kgsl_device_private *dev_priv,
-		unsigned int cmd, void *data)
-{
-	struct kgsl_gpu_aux_command *param = data;
-	struct kgsl_device *device = dev_priv->device;
-	struct kgsl_context *context;
-	struct kgsl_drawobj **drawobjs;
-	struct kgsl_drawobj_sync *tsobj;
-	void __user *cmdlist;
-	u32 queued, count;
-	int i, index = 0;
-	long ret;
-	struct kgsl_gpu_aux_command_generic generic;
-
-	/* We support only one aux command */
-	if (param->numcmds != 1)
-		return -EINVAL;
-
-	if (!(param->flags & KGSL_GPU_AUX_COMMAND_TIMELINE))
-		return -EINVAL;
-
-	context = kgsl_context_get_owner(dev_priv, param->context_id);
-	if (!context)
-		return -EINVAL;
-
-	/*
-	 * param->numcmds is always one and we have one additional drawobj
-	 * for the timestamp sync if KGSL_GPU_AUX_COMMAND_SYNC flag is passed.
-	 * On top of that we make an implicit sync object for the last queued
-	 * timestamp on this context.
-	 */
-	count = (param->flags & KGSL_GPU_AUX_COMMAND_SYNC) ? 3 : 2;
-
-	drawobjs = kvcalloc(count, sizeof(*drawobjs), GFP_KERNEL);
-
-	if (!drawobjs) {
-		kgsl_context_put(context);
-		return -ENOMEM;
-	}
-
-	trace_kgsl_aux_command(context->id, param->numcmds, param->flags,
-		param->timestamp);
-
-	if (param->flags & KGSL_GPU_AUX_COMMAND_SYNC) {
-		struct kgsl_drawobj_sync *syncobj =
-			kgsl_drawobj_sync_create(device, context);
-
-		if (IS_ERR(syncobj)) {
-			ret = PTR_ERR(syncobj);
-			goto err;
-		}
-
-		drawobjs[index++] = DRAWOBJ(syncobj);
-
-		ret = kgsl_drawobj_sync_add_synclist(device, syncobj,
-				u64_to_user_ptr(param->synclist),
-				param->syncsize, param->numsyncs);
-		if (ret)
-			goto err;
-	}
-
-	kgsl_readtimestamp(device, context, KGSL_TIMESTAMP_QUEUED, &queued);
-
-	/*
-	 * Make an implicit sync object for the last queued timestamp on this
-	 * context
-	 */
-	tsobj = kgsl_drawobj_create_timestamp_syncobj(device,
-		context, queued);
-
-	if (IS_ERR(tsobj)) {
-		ret = PTR_ERR(tsobj);
-		goto err;
-	}
-
-	drawobjs[index++] = DRAWOBJ(tsobj);
-
-	cmdlist = u64_to_user_ptr(param->cmdlist);
-
-	/* Create a draw object for KGSL_GPU_AUX_COMMAND_TIMELINE */
-	if (kgsl_copy_struct_from_user(&generic, sizeof(generic),
-		cmdlist, param->cmdsize)) {
-		ret = -EFAULT;
-		goto err;
-	}
-
-	if (generic.type == KGSL_GPU_AUX_COMMAND_TIMELINE) {
-		struct kgsl_drawobj_timeline *timelineobj;
-
-		timelineobj = kgsl_drawobj_timeline_create(device,
-			context);
-
-		if (IS_ERR(timelineobj)) {
-			ret = PTR_ERR(timelineobj);
-			goto err;
-		}
-
-		drawobjs[index++] = DRAWOBJ(timelineobj);
-
-		ret = kgsl_drawobj_add_timeline(dev_priv, timelineobj,
-			u64_to_user_ptr(generic.priv), generic.size);
-		if (ret)
-			goto err;
-	} else {
-		ret = -EINVAL;
-		goto err;
-	}
-
-	ret = device->ftbl->queue_cmds(dev_priv, context,
-		drawobjs, index, &param->timestamp);
-
-err:
-	kgsl_context_put(context);
-
-	if (ret && ret != -EPROTO) {
-		for (i = 0; i < count; i++)
-			kgsl_drawobj_destroy(drawobjs[i]);
-	}
-
-	kvfree(drawobjs);
-	return ret;
-}
-
 long kgsl_ioctl_cmdstream_readtimestamp_ctxtid(struct kgsl_device_private
 						*dev_priv, unsigned int cmd,
 						void *data)
@@ -2472,7 +2355,7 @@ static long gpuobj_free_on_fence(struct kgsl_device_private *dev_priv,
 	}
 
 	handle = kgsl_sync_fence_async_wait(event.fd,
-		gpuobj_free_fence_func, entry, NULL);
+		gpuobj_free_fence_func, entry);
 
 	if (IS_ERR(handle)) {
 		kgsl_mem_entry_unset_pend(entry);
@@ -4701,7 +4584,7 @@ static void kgsl_gpumem_vm_open(struct vm_area_struct *vma)
 {
 	struct kgsl_mem_entry *entry = vma->vm_private_data;
 
-	if (!kgsl_mem_entry_get(entry))
+	if (kgsl_mem_entry_get(entry) == 0)
 		vma->vm_private_data = NULL;
 
 	atomic_inc(&entry->map_count);
@@ -5274,11 +5157,9 @@ int kgsl_request_irq(struct platform_device *pdev, const  char *name,
 		irq_handler_t handler, void *data)
 {
 	int ret, num = platform_get_irq_byname(pdev, name);
-	unsigned long irqflags = IRQF_TRIGGER_HIGH;
 
 	if (num < 0)
 		return num;
-
 
 	ret = devm_request_irq(&pdev->dev, num, handler, IRQF_TRIGGER_HIGH,
 		name, data);
@@ -5319,6 +5200,7 @@ int kgsl_of_property_read_ddrtype(struct device_node *node, const char *base,
 int kgsl_device_platform_probe(struct kgsl_device *device)
 {
 	int status = -EINVAL;
+	int cpu;
 
 	status = _register_device(device);
 	if (status)
@@ -5378,14 +5260,11 @@ int kgsl_device_platform_probe(struct kgsl_device *device)
 	dma_set_max_seg_size(device->dev, KGSL_DMA_BIT_MASK);
 
 	/* Initialize the memory pools */
-	kgsl_init_page_pools(device);
+	kgsl_init_page_pools(device->pdev);
 
-	status = kgsl_reclaim_init(device);
+	status = kgsl_reclaim_init();
 	if (status)
 		goto error_close_mmu;
-
-	idr_init(&device->timelines);
-	spin_lock_init(&device->timelines_lock);
 
 	/*
 	 * The default request type PM_QOS_REQ_ALL_CORES is
@@ -5404,7 +5283,6 @@ int kgsl_device_platform_probe(struct kgsl_device *device)
 	pm_qos_add_request(&device->pwrctrl.pm_qos_req_dma,
 				PM_QOS_CPU_DMA_LATENCY,
 				PM_QOS_DEFAULT_VALUE);
-
 
 	device->events_wq = alloc_workqueue("kgsl-events",
 		WQ_UNBOUND | WQ_MEM_RECLAIM | WQ_SYSFS | WQ_HIGHPRI, 0);
@@ -5443,9 +5321,7 @@ void kgsl_device_platform_remove(struct kgsl_device *device)
 
 	pm_qos_remove_request(&device->pwrctrl.pm_qos_req_dma);
 
-
 	idr_destroy(&device->context_idr);
-	idr_destroy(&device->timelines);
 
 	kgsl_mmu_close(device);
 
@@ -5497,10 +5373,7 @@ static void kgsl_core_exit(void)
 static int __init kgsl_core_init(void)
 {
 	int result = 0;
-
 	struct sched_param param = { .sched_priority = 16 };
-
-
 
 	/* alloc major and minor device numbers */
 	result = alloc_chrdev_region(&kgsl_driver.major, 0,
@@ -5566,12 +5439,11 @@ static int __init kgsl_core_init(void)
 		WQ_HIGHPRI | WQ_UNBOUND | WQ_MEM_RECLAIM | WQ_SYSFS, 0);
 
 	kgsl_driver.mem_workqueue = alloc_workqueue("kgsl-mementry",
-		WQ_HIGHPRI | WQ_UNBOUND | WQ_MEM_RECLAIM | WQ_FREEZABLE, 0);
+		WQ_UNBOUND | WQ_MEM_RECLAIM, 0);
 
 	INIT_WORK(&kgsl_driver.mem_work, _flush_mem_workqueue);
 
 	kthread_init_worker(&kgsl_driver.worker);
-
 
 	kgsl_driver.worker_thread = kthread_run(kthread_worker_fn,
 		&kgsl_driver.worker, "kgsl_worker_thread");
