@@ -936,15 +936,6 @@ int dsi_panel_set_fod_hbm(struct dsi_panel *panel, bool status)
 }
 
 
-	if (status) {
-        panel->dimlayer_exposure = 0;
-		dsi_panel_set_disp_param(panel, DISPPARAM_HBM_FOD_ON);
-	} else {
-		dsi_panel_set_disp_param(panel, DISPPARAM_HBM_FOD_OFF);
-        panel->dimlayer_exposure = 1;
-	}
-
-
 	return rc;
 }
 
@@ -952,61 +943,45 @@ int dsi_panel_set_backlight(struct dsi_panel *panel, u32 bl_lvl)
 {
 	int rc = 0;
 	struct dsi_backlight_config *bl = &panel->bl_config;
-	struct dsi_backlight_config *bl_slaver = &panel->bl_slaver_config;
 	struct dsi_panel_mi_cfg *mi_cfg = &panel->mi_cfg;
 
 	if (panel->host_config.ext_bridge_mode)
 		return 0;
 
-	DSI_INFO("backlight type:%d lvl:%d\n", bl->type, bl_lvl);
-
-	
+	DSI_DEBUG("backlight type:%d lvl:%d\n", bl->type, bl_lvl);
 
 	/* lmi panel must restore to last_bl_level to avoid flash high
 	 * brightness white exiting app lock with DC on (MIUI-1755728),
 	 * must make sure last_bl_level is correct. */
 	if (mi_cfg->dc_type == 2 && mi_cfg->last_bl_level != bl_lvl) {
 		mi_cfg->last_bl_level = bl_lvl;
-		if (bl_lvl)
-			mi_cfg->last_nonzero_bl_level = bl_lvl;
 	}
 
 	if (dc_skip_set_backlight(panel, bl_lvl)) {
 		DSI_INFO("skip set backlight bacase dc enable %d, bl %d\n",
 			panel->mi_cfg.dc_enable, bl_lvl);
 		return rc;
-	}else if (!panel->mi_cfg.bl_enable) {
-		mi_cfg->last_bl_level = bl_lvl;
-		if (bl_lvl)
-			mi_cfg->last_nonzero_bl_level = bl_lvl;
-		return rc;
 	}
 
-	if (0 == bl_lvl && (panel->host_config.cphy_strength || panel->mi_cfg.panel_id == 0x4C38314100420400)){
-		DSI_INFO("set insert black \n");
+	if (0 == bl_lvl && panel->host_config.cphy_strength){
 		dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_INSERT_BLACK);
 		usleep_range((6 * 1000),(6 * 1000) + 10);
 	}
 
 	switch (bl->type) {
 	case DSI_BACKLIGHT_WLED:
-		if (panel->mi_cfg.panel_id == 0x4C38314100420400){
-			rc = backlight_device_set_brightness(bl->raw_bd, bl_lvl);
-			rc = backlight_device_set_brightness(bl_slaver->raw_bd,bl_lvl);
-		}else{
-			rc = backlight_device_set_brightness(bl->raw_bd, bl_lvl);
-		}
+		rc = backlight_device_set_brightness(bl->raw_bd, bl_lvl);
 		break;
 	case DSI_BACKLIGHT_DCS:
 		if (mi_cfg->fod_backlight_flag) {
 			DSI_INFO("fod_backlight_flag set, skip set backlight %d\n", bl_lvl);
 		} else {
 			if (mi_cfg->hbm_51_ctrl_flag &&
-				(mi_cfg->fod_hbm_enabled || 
-				 (mi_cfg->thermal_hbm_disabled && bl_lvl > 2047 && mi_cfg->last_bl_level > 0) || 
-				 (mi_cfg->hbm_enabled && !mi_cfg->hbm_brightness && !mi_cfg->thermal_hbm_disabled))) {
-				DSI_INFO("fod_hbm_enabled(%d), hbm_enabled(%d), thermal_hbm_disabled(%d), skip set backlight %d\n", 
-						mi_cfg->fod_hbm_enabled, mi_cfg->hbm_enabled, mi_cfg->thermal_hbm_disabled, bl_lvl);
+				(mi_cfg->fod_hbm_enabled || (mi_cfg->thermal_hbm_disabled && bl_lvl > 2047 &&
+				 mi_cfg->last_bl_level > 0) || (mi_cfg->hbm_enabled && !mi_cfg->hbm_brightness))) {
+				DSI_INFO("fod_hbm_enabled(%d),hbm_enabled(%d),"
+					"skip set backlight %d\n", mi_cfg->fod_hbm_enabled,
+					mi_cfg->hbm_enabled, bl_lvl);
 			} else if (mi_cfg->thermal_hbm_disabled && bl_lvl > 2047 && mi_cfg->last_bl_level == 0) {
 				bl_lvl = 2047;
 				rc = dsi_panel_update_backlight(panel, bl_lvl);
@@ -1034,10 +1009,8 @@ int dsi_panel_set_backlight(struct dsi_panel *panel, u32 bl_lvl)
 			mi_cfg->dimming_state = STATE_NONE;
 	}
 
-	if (mi_cfg->last_bl_level == 0 && bl_lvl && (panel->host_config.cphy_strength || panel->mi_cfg.panel_id == 0x4C38314100420400)){
-		DSI_INFO("disable insert black \n");
+	if (mi_cfg->last_bl_level == 0 && bl_lvl && panel->host_config.cphy_strength)
 		dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_DISABLE_INSERT_BLACK);
-	}
 
 	if (bl_lvl > 0 && mi_cfg->last_bl_level == 0 && mi_cfg->dc_type) {
 		DSI_INFO("crc off\n");
@@ -1048,7 +1021,7 @@ int dsi_panel_set_backlight(struct dsi_panel *panel, u32 bl_lvl)
 		mi_cfg->dc_enable = false;
 	}
 	mi_cfg->last_bl_level = bl_lvl;
-	if (bl_lvl)
+    if (bl_lvl)
 		mi_cfg->last_nonzero_bl_level = bl_lvl;
 	bl->real_bl_level = bl_lvl;
 	return rc;
