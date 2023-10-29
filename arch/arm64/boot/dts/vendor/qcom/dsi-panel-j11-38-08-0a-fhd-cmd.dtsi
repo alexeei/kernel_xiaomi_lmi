@@ -123,7 +123,7 @@
 	mi,mdss-dsi-elvss-dimming-register-read-length = <1>;
 	mi,mdss-dsi-elvss-dimming-update-hbm-fod-on-index = <4>;
 	mi,mdss-dsi-elvss-dimming-update-hbm-fod-off-index = <7>;
-	mi,mdss-dsi-panel-dc-threshold = <470>;
+	mi,mdss-dsi-panel-dc-threshold = <440>;
 	mi,mdss-dsi-panel-dc-type = <2>; /* differ to cmi */
 
 	mi,mdss-panel-fod-hbm-on-need-prepare;
@@ -191,17 +191,18 @@
 
 			mi,mdss-dsi-hbm-fod-on-command = [
 				39 00 00 00 00 00 03 F0 5A 5A
-				39 00 00 00 00 00 02 B0 03
-				39 00 00 00 00 00 02 B7 C9
+				39 00 00 00 00 00 02 B0 07
+				39 00 00 00 00 00 02 B7 51
 				39 00 00 00 00 00 03 F0 A5 A5
-				39 01 00 00 10 00 02 53 E0];
+				39 01 00 00 05 00 02 53 E0];
 			mi,mdss-dsi-hbm-fod-on-command-state = "dsi_hs_mode";
 			mi,mdss-dsi-hbm-fod-off-command = [
-                                39 00 00 00 00 00 03 F0 5A 5A
-				39 00 00 00 00 00 02 B0 03
-				39 00 00 00 00 00 02 B7 C9
-				39 00 00 00 00 00 03 F0 A5 A5
-				39 01 00 00 10 00 02 53 20];
+                15 01 00 00 00 00 02 53 20
+                39 00 00 00 00 00 03 F0 5A 5A
+                /* elvss dimming on */
+				39 00 00 00 00 00 02 B0 07
+				39 00 00 00 00 00 02 B7 D1
+				39 01 00 00 05 00 03 F0 A5 A5];
 			mi,mdss-dsi-hbm-fod-off-command-state = "dsi_hs_mode";
 
 			mi,mdss-dsi-hbm-off-command = [
