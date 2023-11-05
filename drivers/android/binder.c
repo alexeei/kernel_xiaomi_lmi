@@ -118,7 +118,7 @@ enum {
 static uint32_t binder_debug_mask = 0;
 
 module_param_named(debug_mask, binder_debug_mask, uint, 0644);
-#endif
+
 
 char *binder_devices_param = CONFIG_ANDROID_BINDER_DEVICES;
 module_param_named(devices, binder_devices_param, charp, 0444);

@@ -106,6 +106,8 @@
 #include <linux/kernel.h>
 #include <linux/sched/clock.h>
 #include <linux/tick.h>
+#include <linux/pm_qos.h>
+
 
 
 /*
