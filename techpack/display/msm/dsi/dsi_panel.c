@@ -19,7 +19,7 @@
 #include "dsi_display.h"
 #include "xiaomi_frame_stat.h"
 #include "dsi_mi_feature.h"
-#include <uapi/linux/unistd.h>
+
 
 /**
  * topology is currently defined by a set of following 3 values:
@@ -932,7 +932,6 @@ int dsi_panel_set_fod_hbm(struct dsi_panel *panel, bool status)
 #ifdef CONFIG_DRM_SDE_EXPO
 		if (panel->fd == 1) {
 		panel->dimlayer_exposure = 1;
-        sleep(2);
         panel->dimlayer_exposure = 0;
 	    panel->dimlayer_exposure = 1;
 		}
