@@ -3375,9 +3375,10 @@ static ssize_t fts_secure_touch_show (struct device *dev, struct device_attribut
 	struct fts_secure_info *scr_info = info->secure_info;
 	int value = 0;
 
-	MI_TOUCH_LOGI(1, "%s %s: SECURE_TOUCH[R]:st_1st_complete = %d\n",
+
+	MI_TOUCH_LOGN(1, "%s %s: SECURE_TOUCH[R]:st_1st_complete = %d\n",
 		tag, __func__, atomic_read(&scr_info->st_1st_complete));
-	MI_TOUCH_LOGI(1, "%s %s: SECURE_TOUCH[R]:st_pending_irqs = %d\n",
+	MI_TOUCH_LOGN(1, "%s %s: SECURE_TOUCH[R]:st_pending_irqs = %d\n",
 		tag, __func__, atomic_read(&scr_info->st_pending_irqs));
 
 	if (atomic_read(&scr_info->st_enabled) == 0) {
@@ -3391,7 +3392,7 @@ static ssize_t fts_secure_touch_show (struct device *dev, struct device_attribut
 		value = 1;
 	} else if (atomic_cmpxchg(&scr_info->st_1st_complete, 1, 0) == 1) {
 		complete(&scr_info->st_irq_processed);
-		MI_TOUCH_LOGI(1, "%s %s: SECURE_TOUCH[R]:comlpetion st_irq_processed\n", tag, __func__);
+		MI_TOUCH_LOGN(1, "%s %s: SECURE_TOUCH[R]:comlpetion st_irq_processed\n", tag, __func__);
 	}
 	return scnprintf(buf, PAGE_SIZE, "%d", value);
 }
@@ -4233,9 +4234,6 @@ static void fts_gesture_event_handler(struct fts_ts_info *info,
 
 				if ((info->sensor_sleep && !info->sleep_finger) || !info->sensor_sleep) {
 					info->fod_pressed = true;
-					info->fod_pressed_x = x;
-					info->fod_pressed_y = y;
-					tp_common_notify_fp_state();
 					input_report_key(info->input_dev, BTN_INFO, 1);
 					input_sync(info->input_dev);
 					if (info->fod_id) {
@@ -5978,8 +5976,18 @@ static int fts_set_mode_long_value(int mode, int len, int *buf)
 		if (fts_info->gamemode_enable) {
 			MI_TOUCH_LOGE(1, "%s %s: in gamemode, don't write parameters to touch ic\n", tag, __func__);
 			return 0;
-		} else
+		} else {
+#ifdef CONFIG_SECURE_TOUCH
+			mutex_lock(&scr_info->palm_lock);
+			if (atomic_read(&scr_info->st_enabled)) {
+				MI_TOUCH_LOGE(1, "%s %s: already pending,skip", tag, __func__);
+				mutex_unlock(&scr_info->palm_lock);
+				return 0;
+			}
+			mutex_unlock(&scr_info->palm_lock);
+#endif
 			schedule_work(&fts_info->grip_mode_work);
+		}
 	}
 	return 0;
 }
@@ -7442,21 +7450,6 @@ void fts_secure_remove(struct fts_ts_info *info)
 
 #endif
 
-#ifdef CONFIG_TOUCHSCREEN_COMMON
-static ssize_t fp_state_show(struct kobject *kobj,
-                             struct kobj_attribute *attr, char *buf)
-{
-	if (!fts_info)
-		return -EINVAL;
-
-	return sprintf(buf, "%d,%d,%d\n", fts_info->fod_pressed_x, fts_info->fod_pressed_y,
-		       fts_info->fod_pressed);
-}
-
-static struct tp_common_ops fp_state_ops = {
-	.show = fp_state_show,
-};
-#endif
 
 /**
  * Probe function, called when the driver it is matched with a device with the same name compatible name
@@ -7701,11 +7694,6 @@ static int fts_probe(struct spi_device *client)
 	ret = tp_common_set_double_tap_ops(&double_tap_ops);
 	if (ret < 0)
 		MI_TOUCH_LOGE(1, "%s %s: Failed to create double_tap node err=%d\n",
-			tag, __func__, ret);
-
-	ret = tp_common_set_fp_state_ops(&fp_state_ops);
-	if (ret < 0)
-		MI_TOUCH_LOGE(1, "%s %s: Failed to create fp_state node err=%d\n",
 			tag, __func__, ret);
 #endif
 #endif
