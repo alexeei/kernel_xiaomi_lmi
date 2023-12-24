@@ -833,6 +833,7 @@ static ssize_t devkmsg_write(struct kiocb *iocb, struct iov_iter *from)
 				strncmp(line, "logd: Skipping", sizeof("logd: Skipping")))
 				return ret;
 		}
+		}
 	}
 
 	printk_emit(facility, level, NULL, 0, "%s", line);
