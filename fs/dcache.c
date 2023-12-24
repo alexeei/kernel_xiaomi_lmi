@@ -71,7 +71,7 @@
  * arbitrary, since it's serialized on rename_lock
  */
 
-int sysctl_vfs_cache_pressure __read_mostly = 30;
+int sysctl_vfs_cache_pressure __read_mostly = 100;
 
 EXPORT_SYMBOL_GPL(sysctl_vfs_cache_pressure);
 
