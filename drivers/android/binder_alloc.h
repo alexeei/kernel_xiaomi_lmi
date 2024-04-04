@@ -15,11 +15,7 @@
 #include <linux/list_lru.h>
 #include <uapi/linux/android/binder.h>
 
-<<<<<<< HEAD
-extern struct list_lru binder_alloc_lru;
-=======
 extern struct list_lru binder_freelist;
->>>>>>> 97db4db282afe (binder_alloc: Checkout to android13-5.10)
 struct binder_transaction;
 
 /**
@@ -53,9 +49,7 @@ struct binder_buffer {
 	unsigned async_transaction:1;
 	unsigned oneway_spam_suspect:1;
 	unsigned debug_id:27;
-
 	struct binder_transaction *transaction;
-
 	struct binder_node *target_node;
 	size_t data_size;
 	size_t offsets_size;
@@ -128,7 +122,6 @@ static inline void binder_selftest_alloc(struct binder_alloc *alloc) {}
 enum lru_status binder_alloc_free_page(struct list_head *item,
 				       struct list_lru_one *lru,
 				       spinlock_t *lock, void *cb_arg);
-
 struct binder_buffer *binder_alloc_new_buf(struct binder_alloc *alloc,
 					   size_t data_size,
 					   size_t offsets_size,
@@ -152,7 +145,6 @@ void binder_alloc_print_allocated(struct seq_file *m,
 void binder_alloc_print_pages(struct seq_file *m,
 			      struct binder_alloc *alloc);
 
-
 /**
  * binder_alloc_get_free_async_space() - get free space available for async
  * @alloc:	binder_alloc for this proc
@@ -163,7 +155,6 @@ static inline size_t
 binder_alloc_get_free_async_space(struct binder_alloc *alloc)
 {
 	size_t free_async_space;
-
 
 	spin_lock(&alloc->lock);
 	free_async_space = alloc->free_async_space;
