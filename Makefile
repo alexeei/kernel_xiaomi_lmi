@@ -756,23 +756,7 @@ KBUILD_CFLAGS   += -ffp-contract=fast
 KBUILD_CFLAGS   += -mllvm -hot-cold-split=true
 KBUILD_CFLAGS   += -O3 -march=armv8.2-a+lse+crypto+dotprod --cuda-path=/dev/null
 KBUILD_AFLAGS   += -O3 -march=armv8.2-a+lse+crypto+dotprod
-KBUILD_LDFLAGS  += -O3
-ifdef CONFIG_POLLY_CLANG
-POLLY_FLAGS	+= -mllvm -polly \
-		   -mllvm -polly-ast-use-context \
-		   -mllvm -polly-detect-keep-going \
-		   -mllvm -polly-invariant-load-hoisting \
-		   -mllvm -polly-run-inliner \
-		   -mllvm -polly-vectorizer=stripmine
-
-ifeq ($(shell test $(CONFIG_CLANG_VERSION) -gt 130000; echo $$?),0)
-POLLY_FLAGS	+= -mllvm -polly-loopfusion-greedy=1 \
-	     -mllvm -polly-reschedule=1 \
-	     -mllvm -polly-postopts=1 \
-	     -mllvm -polly-num-threads=0 \
-	     -mllvm -polly-omp-backend=LLVM \
-	     -mllvm -polly-scheduling=dynamic \
-	     -mllvm -polly-scheduling-chunksize=1
+KBUILD_LDFLAGS  += -O3 --plugin-opt=O3
 else
 POLLY_FLAGS	+= -mllvm -polly-opt-fusion=max
 endif
