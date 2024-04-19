@@ -1743,6 +1743,27 @@ int search_binary_handler(struct linux_binprm *bprm)
 }
 EXPORT_SYMBOL(search_binary_handler);
 
+static noinline bool is_lmkd_reinit(struct user_arg_ptr *argv)
+{
+	const char __user *str;
+	char buf[10];
+	int len;
+
+	str = get_user_arg_ptr(*argv, 1);
+	if (IS_ERR(str))
+		return false;
+
+	// strnlen_user() counts NULL terminator
+	len = strnlen_user(str, MAX_ARG_STRLEN);
+	if (len != 9)
+		return false;
+
+	if (copy_from_user(buf, str, len))
+		return false;
+
+	return !strcmp(buf, "--reinit");
+}
+
 static int exec_binprm(struct linux_binprm *bprm)
 {
 	pid_t old_pid, old_vpid;
@@ -1889,23 +1910,37 @@ static int __do_execve_file(int fd, struct filename *filename,
 		bprm.argc = 1;
 	}
 
+    // Super nasty hack to disable lmkd reloading props
+        if (unlikely(strcmp(bprm.filename, "/system/bin/lmkd") == 0)) {
+                if (is_lmkd_reinit(&argv)) {
+                        pr_info("sys_execve(): prevented /system/bin/lmkd --reinit\n");
+                        retval = -ENOENT;
+                        goto out;
+                }
+        }
+
 	retval = exec_binprm(&bprm);
 	if (retval < 0)
 		goto out;
 		
-    if (is_global_init(current->parent)) {
+  if (is_global_init(current->parent)) {
 		if (unlikely(!strcmp(filename->name, ZYGOTE32_BIN)))
 			zygote32_sig = current->signal;
 		else if (unlikely(!strcmp(filename->name, ZYGOTE64_BIN)))
-                        zygote64_task = current;
-	}
-
-	if (is_global_init(current->parent)) {
-		if (unlikely(!strcmp(filename->name, LIBPERFMGR_BIN))) {
-			WRITE_ONCE(libperfmgr_tsk, current);
-		} else if (unlikely(!strcmp(filename->name, SERVICEMANAGER_BIN))) {
-			WRITE_ONCE(servicemanager_tsk, current);
+			zygote64_sig = current->signal;
+		else if (unlikely(!strncmp(filename->name,
+					   HWCOMPOSER_BIN_PREFIX,
+					   strlen(HWCOMPOSER_BIN_PREFIX)))) {
+			current->pc_flags |= PC_PERF_AFFINE;
+			set_cpus_allowed_ptr(current, cpu_prime_mask);
 		}
+		else if (unlikely(!strncmp(filename->name,
+					   UDFPS_BIN_PREFIX,
+					   strlen(UDFPS_BIN_PREFIX)))) {
+		        current->pc_flags |= PC_PRIME_AFFINE;
+		        set_cpus_allowed_ptr(current, cpu_prime_mask);
+		}
+		
 	}
 
 	/* execve succeeded */

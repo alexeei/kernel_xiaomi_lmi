@@ -758,32 +758,11 @@ KBUILD_CFLAGS   += -O3 -march=armv8.2-a+lse+crypto+dotprod -fno-trapping-math -f
 KBUILD_AFLAGS   += -O3 -march=armv8.2-a+lse+crypto+dotprod
 KBUILD_LDFLAGS  += -O3 --plugin-opt=O3
 else
-POLLY_FLAGS	+= -mllvm -polly-opt-fusion=max
-endif
+KBUILD_CFLAGS   += -O2
+KBUILD_AFLAGS   += -O2
+KBUILD_LDFLAGS  += -O2
 
-# Polly may optimise loops with dead paths beyound what the linker
-# can understand. This may negate the effect of the linker's DCE
-# so we tell Polly to perfom proven DCE on the loops it optimises
-# in order to preserve the overall effect of the linker's DCE.
-ifdef CONFIG_LD_DEAD_CODE_DATA_ELIMINATION
-POLLY_FLAGS	+= -mllvm -polly-run-dce
-endif
-KBUILD_CFLAGS += $(POLLY_FLAGS)
-KBUILD_AFLAGS += $(POLLY_FLAGS)
-KBUILD_LDFLAGS	+= $(POLLY_FLAGS)
-endif
 
-ifdef CONFIG_INLINE_OPTIMIZATION
-KBUILD_CFLAGS	+= -mllvm -inline-threshold=2000
-KBUILD_CFLAGS	+= -mllvm -inlinehint-threshold=3000
-KBUILD_CFLAGS   += -mllvm -unroll-threshold=1200
-endif
-
-else
-
-KBUILD_CFLAGS   += -O3
-KBUILD_AFLAGS   += -O3
-KBUILD_LDFLAGS  += -O3
 
 ifdef CONFIG_INLINE_OPTIMIZATION
 ifdef CONFIG_CC_IS_CLANG
