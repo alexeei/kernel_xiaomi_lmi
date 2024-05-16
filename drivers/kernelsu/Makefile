@@ -18,7 +18,7 @@ obj-$(CONFIG_KSU) += kernelsu.o
 
 # .git is a text file while the module is imported by 'git submodule add'.
 
-$(eval KSU_VERSION=11831)
+$(eval KSU_VERSION=11849)
 
 $(info -- KernelSU version: $(KSU_VERSION))
 ccflags-y += -DKSU_VERSION=$(KSU_VERSION)
