@@ -254,11 +254,9 @@ static __always_inline bool check_v2_signature(char *path,
 			// http://aospxref.com/android-14.0.0_r2/xref/frameworks/base/core/java/android/util/apk/ApkSignatureSchemeV3Verifier.java#74
 			v3_1_signing_exist = true;
 		} else {
-
 #ifdef CONFIG_KSU_DEBUG
 			pr_info("Unknown id: 0x%08x\n", id);
 #endif
-
 		}
 		pos += (size8 - offset);
 	}
