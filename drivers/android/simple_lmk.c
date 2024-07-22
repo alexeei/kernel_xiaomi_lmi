@@ -5,7 +5,6 @@
 
 #define pr_fmt(fmt) "simple_lmk: " fmt
 
-#include <linux/delay.h>
 #include <linux/freezer.h>
 #include <linux/kthread.h>
 #include <linux/mm.h>
@@ -15,15 +14,20 @@
 #include <linux/sort.h>
 #include <linux/vmpressure.h>
 #include <uapi/linux/sched/types.h>
+#include <linux/delay.h>
 
 /* The minimum number of pages to free per reclaim */
-#define MIN_FREE_PAGES (CONFIG_ANDROID_SIMPLE_LMK_MINFREE * SZ_1M / PAGE_SIZE)
+static unsigned short slmk_minfree __read_mostly = CONFIG_ANDROID_SIMPLE_LMK_MINFREE;
+module_param(slmk_minfree, short, 0644);
+#define MIN_FREE_PAGES (slmk_minfree * SZ_1M / PAGE_SIZE)
 
 /* Kill up to this many victims per reclaim */
 #define MAX_VICTIMS 1024
 
 /* Timeout in jiffies for each reclaim */
-#define RECLAIM_EXPIRES msecs_to_jiffies(CONFIG_ANDROID_SIMPLE_LMK_TIMEOUT_MSEC)
+static unsigned short slmk_timeout __read_mostly = CONFIG_ANDROID_SIMPLE_LMK_TIMEOUT_MSEC;
+module_param(slmk_timeout, short, 0644);
+#define RECLAIM_EXPIRES msecs_to_jiffies(slmk_timeout)
 
 struct victim_info {
 	struct task_struct *tsk;
@@ -201,7 +205,7 @@ static void set_task_rt_prio(struct task_struct *tsk, int priority)
 
 static void scan_and_kill(void)
 {
-	int i, nr_to_kill = 0;
+	int i, nr_to_kill, nr_found = 0;
 	unsigned long pages_found;
 
 	/*
@@ -213,15 +217,32 @@ static void scan_and_kill(void)
 	write_unlock(&mm_free_lock);
 
 	/* Populate the victims array with tasks sorted by adj and then size */
-	pages_found = find_victims(&nr_to_kill);
-	if (unlikely(!nr_to_kill)) {
+	pages_found = find_victims(&nr_found);
+	if (unlikely(!nr_found)) {
 		pr_err_ratelimited("No processes available to kill!\n");
 		return;
 	}
 
-	/* Weed out unneeded victims if we found too many */
-	if (pages_found > MIN_FREE_PAGES)
+	/* Minimize the number of victims if we found more pages than needed */
+	if (pages_found > MIN_FREE_PAGES) {
+		/* First round of processing to weed out unneeded victims */
+		nr_to_kill = process_victims(nr_found);
+
+		/*
+		 * Try to kill as few of the chosen victims as possible by
+		 * sorting the chosen victims by size, which means larger
+		 * victims that have a lower adj can be killed in place of
+		 * smaller victims with a high adj.
+		 */
+		sort(victims, nr_to_kill, sizeof(*victims), victim_cmp,
+		     victim_swap);
+
+		/* Second round of processing to finally select the victims */
 		nr_to_kill = process_victims(nr_to_kill);
+	} else {
+		/* Too few pages found, so all the victims need to be killed */
+		nr_to_kill = nr_found;
+	}
 
 	/*
 	 * Store the final number of victims for simple_lmk_mm_freed() and the
@@ -294,8 +315,8 @@ static void scan_and_kill(void)
 	/* Wait until all the victims die or until the timeout is reached */
 	if (!wait_for_completion_timeout(&reclaim_done, RECLAIM_EXPIRES))
 		pr_info("Timeout hit waiting for victims to die, proceeding\n");
-	else
-		msleep(28);
+    else
+		msleep(16);
 
 	/* Clean up for future reclaims but let the reaper thread keep going */
 	write_lock(&mm_free_lock);
