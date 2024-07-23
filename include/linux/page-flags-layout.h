@@ -21,17 +21,19 @@
 #elif MAX_NR_ZONES <= 8
 #define ZONES_SHIFT 3
 #else
-#error ZONES_SHIFT -- too many zones configured adjust calculation
+#error ZONES_SHIFT "Too many zones configured"
 #endif
+
+#define ZONES_WIDTH		ZONES_SHIFT
 
 #ifdef CONFIG_SPARSEMEM
 #include <asm/sparsemem.h>
-
-/* SECTION_SHIFT	#bits space required to store a section # */
 #define SECTIONS_SHIFT	(MAX_PHYSMEM_BITS - SECTION_SIZE_BITS)
+#else
+#define SECTIONS_SHIFT	0
+#endif
 
-#endif /* CONFIG_SPARSEMEM */
-
+#ifndef BUILD_VDSO32_64
 /*
  * page->flags layout:
  *
@@ -53,17 +55,14 @@
 #define SECTIONS_WIDTH		0
 #endif
 
-
 #if ZONES_WIDTH + LRU_GEN_WIDTH + SECTIONS_WIDTH + NODES_SHIFT \
 	<= BITS_PER_LONG - NR_PAGEFLAGS
 #define NODES_WIDTH		NODES_SHIFT
-#else
-#ifdef CONFIG_SPARSEMEM_VMEMMAP
+#elif defined(CONFIG_SPARSEMEM_VMEMMAP)
 #error "Vmemmap: No space for nodes field in page flags"
-#endif
+#else
 #define NODES_WIDTH		0
 #endif
-
 
 /*
  * Note that this #define MUST have a value so that it can be tested with
@@ -85,7 +84,6 @@
 #define LAST_CPUPID_SHIFT 0
 #endif
 
-
 #if ZONES_WIDTH + LRU_GEN_WIDTH + SECTIONS_WIDTH + NODES_WIDTH + \
 	LAST_CPUPID_SHIFT <= BITS_PER_LONG - NR_PAGEFLAGS
 #define LAST_CPUPID_WIDTH LAST_CPUPID_SHIFT
@@ -93,7 +91,9 @@
 #define LAST_CPUPID_WIDTH 0
 #endif
 
-
+#if LAST_CPUPID_SHIFT != 0 && LAST_CPUPID_WIDTH == 0
+#define LAST_CPUPID_NOT_IN_PAGE_FLAGS
+#endif
 
 #ifdef CONFIG_KASAN_SW_TAGS
 #define KASAN_TAG_WIDTH 8
@@ -111,15 +111,10 @@
 #error "Not enough bits in page flags"
 #endif
 
-
 /* see the comment on MAX_NR_TIERS */
 #define LRU_REFS_WIDTH	min(__LRU_REFS_WIDTH, BITS_PER_LONG - NR_PAGEFLAGS - \
 			    ZONES_WIDTH - LRU_GEN_WIDTH - SECTIONS_WIDTH - \
 			    NODES_WIDTH - KASAN_TAG_WIDTH - LAST_CPUPID_WIDTH)
-#endif
 
-#if defined(CONFIG_NUMA_BALANCING) && LAST_CPUPID_WIDTH == 0
-#define LAST_CPUPID_NOT_IN_PAGE_FLAGS
 #endif
-
 #endif /* _LINUX_PAGE_FLAGS_LAYOUT */
