@@ -36,7 +36,7 @@ struct fscrypt_name {
 	u32 hash;
 	u32 minor_hash;
 	struct fscrypt_str crypto_buf;
-	bool is_nokey_name;
+	bool is_ciphertext_name;
 };
 
 #define FSTR_INIT(n, l)		{ .name = n, .len = l }
@@ -143,7 +143,7 @@ static inline void fscrypt_handle_d_move(struct dentry *dentry)
  */
 static inline bool fscrypt_is_nokey_name(const struct dentry *dentry)
 {
-	return dentry->d_flags & DCACHE_NOKEY_NAME;
+	return dentry->d_flags & DCACHE_ENCRYPTED_NAME;
 }
 
 /* crypto.c */
@@ -261,6 +261,7 @@ const char *fscrypt_get_symlink(struct inode *inode, const void *caddr,
 				unsigned int max_size,
 				struct delayed_call *done);
 int fscrypt_symlink_getattr(const struct path *path, struct kstat *stat);
+
 #else  /* !CONFIG_FS_ENCRYPTION */
 
 static inline bool fscrypt_has_encryption_key(const struct inode *inode)
@@ -287,7 +288,6 @@ static inline bool fscrypt_is_nokey_name(const struct dentry *dentry)
 {
 	return false;
 }
-
 
 /* crypto.c */
 static inline void fscrypt_enqueue_decrypt_work(struct work_struct *work)
