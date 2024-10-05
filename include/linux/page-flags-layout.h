@@ -32,6 +32,7 @@
 
 #endif /* CONFIG_SPARSEMEM */
 
+#ifndef BUILD_VDSO32_64
 /*
  * page->flags layout:
  *
@@ -90,6 +91,7 @@
 #else
 #define LAST_CPUPID_WIDTH 0
 #endif
+
 
 #if SECTIONS_WIDTH+ZONES_WIDTH+NODES_WIDTH+LRU_GEN_WIDTH+ \
 	KASAN_TAG_WIDTH + LAST_CPUPID_WIDTH > BITS_PER_LONG - NR_PAGEFLAGS
