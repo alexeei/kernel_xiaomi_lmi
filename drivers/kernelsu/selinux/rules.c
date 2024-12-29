@@ -1,6 +1,6 @@
-#include "linux/uaccess.h"
-#include "linux/types.h"
-#include "linux/version.h"
+#include <linux/uaccess.h>
+#include <linux/types.h>
+#include <linux/version.h>
 
 #include "../klog.h" // IWYU pragma: keep
 #include "selinux.h"
@@ -91,6 +91,7 @@ void apply_kernelsu_rules()
 	ksu_allow(db, "init", "adb_data_file", "file", ALL);
 	ksu_allow(db, "init", "adb_data_file", "dir", ALL); // #1289
 	ksu_allow(db, "init", KERNEL_SU_DOMAIN, ALL, ALL);
+	
 	// we need to umount modules in zygote
 	ksu_allow(db, "zygote", "adb_data_file", "dir", "search");
 
@@ -129,12 +130,6 @@ void apply_kernelsu_rules()
 
 	// Allow all binder transactions
 	ksu_allow(db, ALL, KERNEL_SU_DOMAIN, "binder", ALL);
-
-	// Allow system server devpts
-	ksu_allow(db, "system_server", "untrusted_app_all_devpts", "chr_file",
-		  "read");
-	ksu_allow(db, "system_server", "untrusted_app_all_devpts", "chr_file",
-		  "write");
 
     // Allow system server kill su process
     ksu_allow(db, "system_server", KERNEL_SU_DOMAIN, "process", "getpgid");

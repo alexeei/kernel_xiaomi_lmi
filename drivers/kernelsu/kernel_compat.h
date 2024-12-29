@@ -1,10 +1,10 @@
 #ifndef __KSU_H_KERNEL_COMPAT
 #define __KSU_H_KERNEL_COMPAT
 
-#include "linux/fs.h"
-#include "linux/key.h"
-#include "linux/version.h"
+#include <linux/fs.h>
+#include <linux/version.h>
 #include "ss/policydb.h"
+#include "linux/key.h"
 
 /*
  * Adapt to Huawei HISI kernel without affecting other kernels ,
@@ -24,7 +24,7 @@ extern long ksu_strncpy_from_user_nofault(char *dst,
 					  const void __user *unsafe_addr,
 					  long count);
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 10, 0) || defined(CONFIG_IS_HW_HISI)
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 10, 0) || defined(CONFIG_IS_HW_HISI) || defined(CONFIG_KSU_ALLOWLIST_WORKAROUND)
 extern struct key *init_session_keyring;
 #endif
 
