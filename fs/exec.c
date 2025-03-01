@@ -75,7 +75,7 @@
 int suid_dumpable = 0;
 
 
-#define LIBPERFMGR_BIN "/vendor/bin/hw/android.hardware.power-service.xiaomi-lmi"
+#define LIBPERFMGR_BIN "/vendor/bin/hw/android.hardware.power-service.lineage-libperfmgr"
 #define SERVICEMANAGER_BIN "/system/bin/servicemanager"
 
 static struct task_struct *servicemanager_tsk;
@@ -92,6 +92,20 @@ bool task_is_libperfmgr(struct task_struct *p)
 
 	rcu_read_lock();
 	tsk = READ_ONCE(libperfmgr_tsk);
+	ret = tsk && same_thread_group(p, tsk);
+	rcu_read_unlock();
+
+	return ret;
+}
+
+static struct task_struct *powerhal_tsk;
+bool task_is_powerhal(struct task_struct *p)
+{
+	struct task_struct *tsk;
+	bool ret;
+
+	rcu_read_lock();
+	tsk = READ_ONCE(powerhal_tsk);
 	ret = tsk && same_thread_group(p, tsk);
 	rcu_read_unlock();
 
